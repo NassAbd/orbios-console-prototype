@@ -1,0 +1,16 @@
+Based on what's been implemented, here's how we should rework/improve:
+
+- Use real satellite tracking, based on satellite_config.json for the geospatial view, also use real earth map and real TLE data.
+- When igniting a fire, it should be assigned to a satellite that can see it (based on position)
+- Add more metrics to the dashboard, such as:
+  - CPU usage
+  - Memory usage
+  - Disk usage
+  - Network usage
+  - Uptime
+  - Temperature
+  - Processes
+  - Users
+  - System info
+- Improve the UI to be more visually appealing and user-friendly.
+- Ensure that the queue window is actually scrollable.

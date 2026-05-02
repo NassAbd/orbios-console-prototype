@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ORBIOS SPACE OS — WILDFIRE PROTOTYPE</title>
+    <link rel="stylesheet" href="index.css">
+</head>
+
+<body>
+    <header>
+        <div id="sys-clock">02 MAY 2026 10:48:30</div>
+        <div id="os-title">ORBIOS.AI // TACTICAL CONSOLE v1.0.4</div>
+        <div id="sys-status">STATUS: NOMINAL</div>
+    </header>
+
+    <main class="mfd-container">
+        <!-- LEFT PANE: SYSTEM & TELEMETRY -->
+        <section class="pane" id="pane-system">
+            <div class="pane-header">
+                <span>SYSTEM TELEMETRY</span>
+                <span id="uptime-display">UP 00:12:45</span>
+            </div>
+            <div class="pane-content">
+                <div class="stat-grid">
+                    <div class="stat-row">
+                        <div class="stat-label">CPU</div>
+                        <div class="stat-value" id="cpu-val">0.0%</div>
+                        <div class="progress-bar"><div id="cpu-bar" class="progress-fill" style="width: 0%"></div></div>
+                    </div>
+                    <div class="stat-row">
+                        <div class="stat-label">RAM</div>
+                        <div class="stat-value" id="ram-val">0.0%</div>
+                        <div class="progress-bar"><div id="ram-bar" class="progress-fill" style="width: 0%"></div></div>
+                    </div>
+                    <div class="stat-row">
+                        <div class="stat-label">TEMP</div>
+                        <div class="stat-value" id="temp-val">0.0°C</div>
+                        <div class="progress-bar"><div id="temp-bar" class="progress-fill" style="width: 0%"></div></div>
+                    </div>
+                    <div class="stat-row">
+                        <div class="stat-label">DISK</div>
+                        <div class="stat-value" id="disk-val">0.0%</div>
+                        <div class="progress-bar"><div id="disk-bar" class="progress-fill" style="width: 0%"></div></div>
+                    </div>
+                </div>
+
+                <div class="stat-divider">NETWORK & SYSTEM</div>
+                
+                <div class="stat-row-compact">
+                    <span class="stat-label">NET RX:</span> <span id="net-rx-val">0.0 MB/s</span>
+                </div>
+                <div class="stat-row-compact">
+                    <span class="stat-label">NET TX:</span> <span id="net-tx-val">0.0 MB/s</span>
+                </div>
+                <div class="stat-row-compact">
+                    <span class="stat-label">PROC:</span> <span id="proc-val">0</span>
+                </div>
+                <div class="stat-row-compact">
+                    <span class="stat-label">USERS:</span> <span id="users-val">0</span>
+                </div>
+                
+                <div class="stat-divider">AI STATUS</div>
+                <div class="stat-row-compact">
+                    <span class="stat-label">ORBIOS.AI:</span> <span id="container-val">HEALTHY</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- CENTER PANE: TACTICAL MAP -->
+        <section class="pane" id="pane-map">
+            <div class="pane-header">
+                <span>TACTICAL GEOSPATIAL VIEW</span>
+                <span id="sat-count">SATS: 0</span>
+            </div>
+            <div class="pane-content" style="padding: 0;">
+                <canvas id="tactical-map"></canvas>
+            </div>
+        </section>
+
+        <!-- RIGHT PANE: MISSION & COMM -->
+        <section class="pane" id="pane-mission">
+            <div class="pane-header">
+                <span>MISSION OPS</span>
+                <span id="task-count">ACTIVE: 0</span>
+            </div>
+            <div class="pane-content mfd-scroll-pane">
+                <div id="task-list">
+                    <!-- Tasks with progress bars injected here -->
+                </div>
+            </div>
+            
+            <div class="stat-divider" style="margin: 0; padding: 5px 15px; background: rgba(0,255,65,0.05);">GS-COMM TERMINAL</div>
+            <div class="pane-content terminal-pane" id="terminal-log">
+                <!-- Ground Station messages injected here -->
+            </div>
+
+            <div class="pane-footer">
+                <button class="btn-mfd" onclick="igniteFire()">TRIGGER HEAT SPIKE</button>
+                <button class="btn-mfd btn-danger" onclick="clearState()">PURGE SYSTEMS</button>
+            </div>
+        </section>
+    </main>
+
+    <script src="main.js"></script>
+</body>
+
+</html>

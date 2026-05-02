@@ -1,0 +1,25 @@
+from ben
+check open pbs
+minimize data transfer
+not real time
+simulate satellites range
+military mfd aircraft
+raspberry pi
+track satellites by json
+simulator to start the fire
+
+simulate temperature, heat, impact
+
+ai able to manage container
+
+console with 3 windows
+
+satellites demonstrate where it is, acquisition of signal
+
+console with system status, queue/tasks status
+
+simulator with button
+
+everything's modular
+
+not rewriting everything
