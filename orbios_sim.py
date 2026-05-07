@@ -18,6 +18,12 @@ LOGS         = SIGNALS / "logs"
 for p in [MISSION, LOGS, DATA / "telemetry"]:
     p.mkdir(parents=True, exist_ok=True)
 
+# --- Onboard Memory Buffer State ---
+STATE = {
+    "onboard_anomaly": None,     # Unconfirmed raw sensor logs
+    "onboard_confirmed": None    # Confirmed AI wildfire logs
+}
+
 # --- Orbital Setup ---
 # ISS (ZARYA) TLE - Used as our primary sensor platform for the PoC
 tle_line1 = '1 25544U 98067A   24124.52622410  .00016717  00000-0  30142-3 0  9997'
@@ -55,6 +61,15 @@ def update_telemetry():
 def clean_signals():
     for f in MISSION.iterdir(): f.unlink()
     for f in LOGS.iterdir(): f.unlink()
+    STATE["onboard_anomaly"] = None
+    STATE["onboard_confirmed"] = None
+
+def is_aos_active():
+    """Check if the Ground Station AOS (Acquisition of Signal) connection is established"""
+    for f in MISSION.iterdir():
+        if f.name.startswith("AOS_GS01"):
+            return True
+    return False
 
 def run_sim():
     log_event("ORBIOS SIMULATOR ONLINE")
@@ -64,37 +79,84 @@ def run_sim():
             # 1. Update Physics
             sat_data = update_telemetry()
             
-            # 2. Check for commands
+            # 2. Check current Downlink Status
+            aos_active = is_aos_active()
+
+            # 3. Handle Downlink Flushes (if AOS connects while items are in buffer)
+            if aos_active:
+                if STATE["onboard_anomaly"]:
+                    fire_data = STATE["onboard_anomaly"]
+                    log_event("DOWNLINK: ANOMALY FLUSHED TO GS-01", fire_data)
+                    with open(MISSION / "HEAT_SPIKE_ACTIVE.json", "w") as jf:
+                        json.dump(fire_data, jf)
+                    STATE["onboard_anomaly"] = None
+
+                if STATE["onboard_confirmed"]:
+                    fire_data = STATE["onboard_confirmed"]
+                    log_event("DOWNLINK: CONFIRMED ALERT FLUSHED TO GS-01", fire_data)
+                    with open(MISSION / "FIRE_CONFIRMED.json", "w") as jf:
+                        json.dump(fire_data, jf)
+                    STATE["onboard_confirmed"] = None
+
+            # 4. Check for incoming commands
             found_files = list(MISSION.iterdir())
             for f in found_files:
                 fname = f.name
                 
                 if fname.startswith("INIT_FIRE"):
-                    # Generate a fire at a random location near the satellite's path
+                    # Generate a fire near the satellite's path
                     fire_data = {
                         "type": "HEAT_ANOMALY",
-                        "lat": sat_data["lat"] + random.uniform(-2, 2),
-                        "lon": sat_data["lon"] + random.uniform(-2, 2),
-                        "intensity": random.uniform(0.7, 0.95),
+                        "lat": sat_data["lat"] + random.uniform(-1.5, 1.5),
+                        "lon": sat_data["lon"] + random.uniform(-1.5, 1.5),
+                        "intensity": random.uniform(0.72, 0.96),
                         "status": "DETECTED"
                     }
-                    log_event("DETECTION: HEAT ANOMALY DETECTED", fire_data)
-                    with open(MISSION / "HEAT_SPIKE_ACTIVE.json", "w") as jf:
-                        json.dump(fire_data, jf)
+                    
+                    if aos_active:
+                        log_event("DETECTION: DIRECT TELEMETRY DOWNLINKED", fire_data)
+                        with open(MISSION / "HEAT_SPIKE_ACTIVE.json", "w") as jf:
+                            json.dump(fire_data, jf)
+                    else:
+                        log_event("DETECTION: STORED ONBOARD (LINK OFFLINE)", fire_data)
+                        STATE["onboard_anomaly"] = fire_data
                     f.unlink()
 
                 elif fname.startswith("START_AI"):
-                    log_event("AI_AGENT: INITIATING INFERENCE")
-                    time.sleep(2)
-                    # Read the active fire data
-                    if (MISSION / "HEAT_SPIKE_ACTIVE.json").exists():
-                        with open(MISSION / "HEAT_SPIKE_ACTIVE.json", "r") as rj:
-                            fire_data = json.load(rj)
-                        fire_data["status"] = "CONFIRMED"
-                        log_event("AI_AGENT: WILDFIRE CONFIRMED", fire_data)
-                        with open(MISSION / "FIRE_CONFIRMED.json", "w") as jf:
-                            json.dump(fire_data, jf)
-                        (MISSION / "HEAT_SPIKE_ACTIVE.json").unlink()
+                    # Check if we have any active raw fire (on disk or in buffer)
+                    active_fire = None
+                    if STATE["onboard_anomaly"]:
+                        active_fire = STATE["onboard_anomaly"]
+                    elif (MISSION / "HEAT_SPIKE_ACTIVE.json").exists():
+                        try:
+                            with open(MISSION / "HEAT_SPIKE_ACTIVE.json", "r") as rj:
+                                active_fire = json.load(rj)
+                        except Exception:
+                            pass
+
+                    if active_fire:
+                        log_event("AI_AGENT: INITIATING EDGE INFERENCE")
+                        time.sleep(2) # Simulated edge inference lag
+                        
+                        active_fire["status"] = "CONFIRMED"
+                        
+                        if aos_active:
+                            log_event("AI_AGENT: WILDFIRE CONFIRMED - DOWNLINKED", active_fire)
+                            with open(MISSION / "FIRE_CONFIRMED.json", "w") as jf:
+                                json.dump(active_fire, jf)
+                            
+                            # Clean up unconfirmed raw maps markers
+                            if (MISSION / "HEAT_SPIKE_ACTIVE.json").exists():
+                                (MISSION / "HEAT_SPIKE_ACTIVE.json").unlink()
+                        else:
+                            log_event("AI_AGENT: WILDFIRE CONFIRMED - STORED", active_fire)
+                            STATE["onboard_confirmed"] = active_fire
+                            STATE["onboard_anomaly"] = None
+                            
+                            if (MISSION / "HEAT_SPIKE_ACTIVE.json").exists():
+                                (MISSION / "HEAT_SPIKE_ACTIVE.json").unlink()
+                    else:
+                        log_event("AI_AGENT: ERROR - NO DETECTED ANOMALY FOUND")
                     f.unlink()
                     
                 elif fname.startswith("RESET"):

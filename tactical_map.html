@@ -14,19 +14,62 @@
             color: #00ff41; font-family: monospace; font-size: 10px;
             background: rgba(0,0,0,0.8); padding: 5px; border: 1px solid #00ff41;
             letter-spacing: 1px;
+            box-shadow: 0 0 10px rgba(0,255,65,0.2);
         }
-        /* Pulsing Fire Animation */
-        @keyframes pulse {
-            0% { transform: scale(0.8); opacity: 0.8; }
-            50% { transform: scale(1.5); opacity: 0.3; }
-            100% { transform: scale(0.8); opacity: 0.8; }
+
+        /* Leaflet Popup Styling Override for Phosphor Aesthetic */
+        .leaflet-popup-content-wrapper {
+            background: #000 !important;
+            color: #00ff41 !important;
+            border: 1.5px solid #00ff41 !important;
+            font-family: monospace !important;
+            font-size: 10px !important;
+            border-radius: 4px !important;
+            box-shadow: 0 0 15px rgba(0,255,65,0.4) !important;
         }
-        .fire-pulse {
-            background: #ff4444;
+        .leaflet-popup-tip {
+            background: #000 !important;
+            border-left: 1.5px solid #00ff41 !important;
+            border-bottom: 1.5px solid #00ff41 !important;
+        }
+
+        /* Custom Satellite Marker Icon Styling */
+        .sat-marker-element {
+            color: #00ff41;
+            font-size: 22px;
+            font-weight: bold;
+            text-align: center;
+            text-shadow: 0 0 8px rgba(0,255,65,0.8);
+            transform: rotate(45deg);
+        }
+
+        /* Unconfirmed Anomaly Animation (Amber Pulsing) */
+        @keyframes amber-pulse {
+            0% { transform: scale(0.6); opacity: 0.9; box-shadow: 0 0 0 0px rgba(255, 170, 51, 0.7); }
+            70% { transform: scale(1.2); opacity: 0.4; box-shadow: 0 0 0 15px rgba(255, 170, 51, 0); }
+            100% { transform: scale(0.6); opacity: 0; box-shadow: 0 0 0 0px rgba(255, 170, 51, 0); }
+        }
+        .fire-unconfirmed-pulse {
+            background: #ffaa33;
             border-radius: 50%;
-            width: 20px; height: 20px;
-            animation: pulse 1s infinite;
+            width: 16px; height: 16px;
+            animation: amber-pulse 1.2s infinite ease-out;
             border: 2px solid #fff;
+        }
+
+        /* Confirmed Wildfire Animation (Neon Critical Red Pulsing) */
+        @keyframes red-pulse {
+            0% { transform: scale(0.8); opacity: 1; box-shadow: 0 0 0 0px rgba(226, 75, 74, 0.8); }
+            70% { transform: scale(1.6); opacity: 0.3; box-shadow: 0 0 0 25px rgba(226, 75, 74, 0); }
+            100% { transform: scale(0.8); opacity: 0; box-shadow: 0 0 0 0px rgba(226, 75, 74, 0); }
+        }
+        .fire-confirmed-pulse {
+            background: #e24b4a;
+            border-radius: 50%;
+            width: 22px; height: 22px;
+            animation: red-pulse 0.9s infinite ease-out;
+            border: 2.5px solid #fff;
+            box-shadow: 0 0 15px rgba(226,75,74,0.6);
         }
     </style>
 </head>
@@ -42,13 +85,15 @@
         L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(map);
 
         let satMarker = null;
+        let satCircle = null; // Satellite coverage footprint radius
         let missionMarkers = {};
 
-        // Custom Satellite Icon
+        // Custom Satellite Icon (using divIcon for glow filter compatibility)
         const satIcon = L.divIcon({
-            html: '<div style="color:#00ff41; font-size:20px;">▲</div>',
-            className: 'sat-icon',
-            iconSize: [20, 20]
+            html: '<div class="sat-marker-element">▲</div>',
+            className: 'sat-icon-wrapper',
+            iconSize: [24, 24],
+            iconAnchor: [12, 12]
         });
 
         async function pollTelemetry() {
@@ -56,15 +101,24 @@
                 const r = await fetch('http://localhost:5005/data/telemetry/sat_01.json?t=' + Date.now());
                 if (r.ok) {
                     const data = await r.json();
-                    console.log("Telemetry Received:", data);
+                    
                     if (!satMarker) {
+                        // Create satellite marker and footprint circle
                         satMarker = L.marker([data.lat, data.lon], {icon: satIcon}).addTo(map);
+                        satCircle = L.circle([data.lat, data.lon], {
+                            radius: 800000, // 800 kilometers dynamic footprint circle
+                            color: '#00ff41',
+                            fillColor: '#00ff41',
+                            fillOpacity: 0.08,
+                            weight: 1,
+                            dashArray: '4, 4'
+                        }).addTo(map);
                         map.setView([data.lat, data.lon], 3);
                     } else {
+                        // Smoothly update positions
                         satMarker.setLatLng([data.lat, data.lon]);
+                        satCircle.setLatLng([data.lat, data.lon]);
                     }
-                } else {
-                    console.error("Telemetry Fetch Failed:", r.status);
                 }
             } catch(e) {
                 console.error("Telemetry Error:", e);
@@ -73,34 +127,75 @@
 
         async function pollMission() {
             try {
-                // In a real file-bus, we might check a signals list. 
-                // For this PoC, we check specific mission files.
-                const files = ['HEAT_SPIKE_ACTIVE.json', 'FIRE_CONFIRMED.json'];
+                const files = [
+                    { name: 'HEAT_SPIKE_ACTIVE.json', type: 'unconfirmed' },
+                    { name: 'FIRE_CONFIRMED.json', type: 'confirmed' }
+                ];
                 
-                for (const fname of files) {
-                    const r = await fetch('http://localhost:5005/signals/mission/' + fname + '?t=' + Date.now());
+                for (const item of files) {
+                    const r = await fetch('http://localhost:5005/signals/mission/' + item.name + '?t=' + Date.now());
                     if (r.ok) {
                         const data = await r.json();
-                        if (!missionMarkers[fname]) {
+                        
+                        if (!missionMarkers[item.name]) {
+                            // Assign respective pulsing CSS class based on confirmation state
+                            const markerClass = item.type === 'confirmed' ? 'fire-confirmed-pulse' : 'fire-unconfirmed-pulse';
                             const icon = L.divIcon({
-                                className: 'fire-pulse',
-                                html: ''
+                                className: markerClass,
+                                html: '',
+                                iconSize: item.type === 'confirmed' ? [22, 22] : [16, 16],
+                                iconAnchor: item.type === 'confirmed' ? [11, 11] : [8, 8]
                             });
-                            missionMarkers[fname] = L.marker([data.lat, data.lon], {icon: icon}).addTo(map);
-                            map.flyTo([data.lat, data.lon], 5);
+
+                            // Create marker
+                            const marker = L.marker([data.lat, data.lon], {icon: icon}).addTo(map);
+                            missionMarkers[item.name] = marker;
+
+                            // Formulate detailed tactical telemetry popups
+                            let popupText = '';
+                            if (item.type === 'confirmed') {
+                                popupText = `
+                                    <div style="line-height: 1.4;">
+                                        <b style="color: #e24b4a; font-size: 11px;">🚨 CRITICAL WILDFIRE CONFIRMED</b><br>
+                                        <hr style="border: none; border-top: 1px solid #e24b4a; margin: 4px 0;">
+                                        <b>COORDS:</b> [${data.lat.toFixed(4)}N, ${data.lon.toFixed(4)}E]<br>
+                                        <b>INTENSITY:</b> ${(data.intensity * 100).toFixed(1)}%<br>
+                                        <b>AI EDGE RUNNER:</b> EDGE_INFERENCE_VALIDATED<br>
+                                        <b>GS-LINK:</b> ESTABLISHED
+                                    </div>
+                                `;
+                            } else {
+                                popupText = `
+                                    <div style="line-height: 1.4;">
+                                        <b style="color: #ffaa33; font-size: 11px;">⚠️ RAW HEAT SIGNATURE DETECTED</b><br>
+                                        <hr style="border: none; border-top: 1px solid #ffaa33; margin: 4px 0;">
+                                        <b>COORDS:</b> [${data.lat.toFixed(4)}N, ${data.lon.toFixed(4)}E]<br>
+                                        <b>EST. INTENSITY:</b> ${(data.intensity * 100).toFixed(1)}%<br>
+                                        <b>STATUS:</b> PENDING EDGE-AI RUN
+                                    </div>
+                                `;
+                            }
+
+                            marker.bindPopup(popupText).openPopup();
+                            
+                            // Fly to and focus map nicely on the fire hazard area
+                            map.flyTo([data.lat, data.lon], 5, { animate: true, duration: 1.5 });
                         }
                     } else {
-                        if (missionMarkers[fname]) {
-                            map.removeLayer(missionMarkers[fname]);
-                            delete missionMarkers[fname];
+                        // If file-bus indicates state is cleared, remove the layer
+                        if (missionMarkers[item.name]) {
+                            map.removeLayer(missionMarkers[item.name]);
+                            delete missionMarkers[item.name];
                         }
                     }
                 }
-            } catch(e) {}
+            } catch(e) {
+                console.error("Mission polling error:", e);
+            }
         }
 
         setInterval(pollTelemetry, 1000);
-        setInterval(pollMission, 2000);
+        setInterval(pollMission, 1500);
     </script>
 </body>
 </html>

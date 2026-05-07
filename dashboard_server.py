@@ -11,7 +11,7 @@ Started automatically by launch_dashboard.command.
 Visit http://127.0.0.1:5000 once running.
 """
 
-import os, re, sys, time, platform, subprocess
+import os, re, sys, time, platform, subprocess, json
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -269,6 +269,18 @@ def metrics():
             "uptime":    uptime,
             "cpu_count": psutil.cpu_count(logical=True),
         }
+
+    # ── Wildfire Detection Link ──────────────────────────────────────────────
+    fire_confirmed_path = BASE / "signals" / "mission" / "FIRE_CONFIRMED.json"
+    data["wildfire_alert"] = {
+        "active": fire_confirmed_path.exists()
+    }
+    if data["wildfire_alert"]["active"]:
+        try:
+            with open(fire_confirmed_path, "r") as f:
+                data["wildfire_alert"]["data"] = json.load(f)
+        except Exception:
+            pass
 
     return jsonify(data)
 

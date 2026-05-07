@@ -227,6 +227,7 @@ const DEFAULT_CONFIG = {
 // ─── STATE ────────────────────────────────────────────────────────────────────
 let config       = null;
 let latchState   = {};
+let latchedFilename = {}; // Store filenames of latched buttons to clean them up on release
 let touchedFiles = {};
 let displayLines = [];   // rolling buffer of all lines ever added this session
 let seenFiles    = new Set();
@@ -473,19 +474,30 @@ async function handleButtonClick(id) {
         for (const pid of cfg.me) {
           if (latchState[pid]) {
             latchState[pid] = false;
+            if (latchedFilename[pid]) {
+              await removeFile(cfg.file.dir, latchedFilename[pid]);
+              delete latchedFilename[pid];
+            }
             updateButtonVisual(pid);
           }
         }
       }
       if (cfg.file && cfg.file.dir && cfg.file.name) {
         const vname = versionedName(cfg.file.name);
+        latchedFilename[id] = vname;
         const ok    = await touchFile(cfg.file.dir, vname);
         if (ok) setStatus('LATCHED: ' + vname);
       } else {
         setStatus('LATCHED: BTN ' + id);
       }
     } else {
-      setStatus('RELEASED: BTN ' + id);
+      if (cfg.file && cfg.file.dir && cfg.file.name && latchedFilename[id]) {
+        await removeFile(cfg.file.dir, latchedFilename[id]);
+        setStatus('RELEASED: ' + latchedFilename[id]);
+        delete latchedFilename[id];
+      } else {
+        setStatus('RELEASED: BTN ' + id);
+      }
     }
     updateButtonVisual(id);
     updateAllMEFlags();

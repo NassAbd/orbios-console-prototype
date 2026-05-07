@@ -248,6 +248,36 @@ html, body {
 }
 #status-dot.error { background: var(--c-crit); opacity: 0.9; }
 #status-dot.pulse { opacity: 0.7; }
+
+/* ── Wildfire Emergency Flashing State ── */
+@keyframes emergency-flash {
+  0% { background-color: rgba(226, 75, 74, 0.05); }
+  50% { background-color: rgba(226, 75, 74, 0.25); }
+  100% { background-color: rgba(226, 75, 74, 0.05); }
+}
+#rail.emergency-active {
+  animation: emergency-flash 1s infinite ease-in-out;
+  border-bottom: 2px solid var(--c-crit) !important;
+}
+.emergency-banner {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--c-crit);
+  color: #fff;
+  font-weight: bold;
+  font-size: 10px;
+  letter-spacing: 0.12em;
+  padding: 0 16px;
+  border-radius: 4px;
+  animation: blinker 1s linear infinite;
+  margin: 12px 10px;
+  box-shadow: 0 0 10px rgba(226,75,74,0.5);
+  text-transform: uppercase;
+}
+@keyframes blinker {
+  50% { opacity: 0.3; }
+}
 </style>
 </head>
 <body>
@@ -352,12 +382,29 @@ function buildRail() {
   const rail    = document.getElementById('rail');
   rail.innerHTML = '';
 
+  const isEmergency = METRICS && METRICS.wildfire_alert && METRICS.wildfire_alert.active;
+  if (isEmergency) {
+    rail.classList.add('emergency-active');
+    
+    // Create emergency warning block
+    const banner = document.createElement('div');
+    banner.className = 'emergency-banner';
+    banner.innerHTML = '⚡ CRITICAL WARNING: WILDFIRE CONFIRMED ⚡';
+    rail.appendChild(banner);
+    
+    const sep = document.createElement('div');
+    sep.className = 'sep';
+    rail.appendChild(sep);
+  } else {
+    rail.classList.remove('emergency-active');
+  }
+
   const enabled = Object.entries(panels)
     .filter(([, v]) => v.enabled)
     .sort(([, a], [, b]) => (a.order || 99) - (b.order || 99));
 
   enabled.forEach(([key, pcfg], i) => {
-    if (i > 0) rail.insertAdjacentHTML('beforeend', '<div class="sep"></div>');
+    if (i > 0 || isEmergency) rail.insertAdjacentHTML('beforeend', '<div class="sep"></div>');
     const seg = buildSegment(key, pcfg);
     if (seg) rail.appendChild(seg);
   });
