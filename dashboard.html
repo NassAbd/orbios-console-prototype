@@ -1,0 +1,764 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mac Dashboard</title>
+<style>
+/* ── CSS variables (overridden from config via JS) ── */
+:root {
+  --c-ok:    #1d9e75;
+  --c-warn:  #ef9f27;
+  --c-crit:  #e24b4a;
+  --c-info:  #6ab0e8;
+  --c-bg:    #0d0d10;
+  --c-pop:   #17171d;
+  --c-text:  rgba(255,255,255,0.82);
+  --c-muted: rgba(255,255,255,0.32);
+  --c-dim:   rgba(255,255,255,0.10);
+  --rail-h:  66px;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body {
+  width: 100%; height: 100%;
+  background: var(--c-bg);
+  color: var(--c-text);
+  font-family: "SF Mono", "Cascadia Code", "Fira Code", ui-monospace, monospace;
+  font-size: 12px;
+  overflow: hidden;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+/* ── Rail ─────────────────────────────────────────── */
+#rail {
+  position: fixed;
+  top: 0; left: 0; right: 0;
+  height: var(--rail-h);
+  display: flex;
+  align-items: stretch;
+  border-bottom: 0.5px solid var(--c-dim);
+  padding: 0 6px;
+  gap: 0;
+}
+
+.seg {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  padding: 0 13px;
+  cursor: default;
+  border-radius: 5px;
+  transition: background 0.12s;
+  flex-shrink: 0;
+}
+.seg:hover,
+.seg.pinned { background: rgba(255,255,255,0.06); }
+
+/* The process ticker expands to fill remaining space */
+.seg-proc { flex: 1; min-width: 0; }
+
+.sep {
+  width: 0.5px;
+  background: var(--c-dim);
+  margin: 16px 0;
+  flex-shrink: 0;
+  align-self: stretch;
+}
+
+/* ── Segment anatomy ─────────────────────────────── */
+.seg-label {
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--c-muted);
+  margin-bottom: 3px;
+  white-space: nowrap;
+}
+
+.seg-val {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.seg-sub {
+  font-size: 9px;
+  color: var(--c-muted);
+  margin-top: 3px;
+  white-space: nowrap;
+}
+
+.mini-bar {
+  height: 3px;
+  border-radius: 2px;
+  background: rgba(255,255,255,0.08);
+  margin-top: 5px;
+  width: 76px;
+  overflow: hidden;
+}
+.mini-fill {
+  height: 100%;
+  border-radius: 2px;
+  transition: width 0.6s ease;
+}
+
+/* ── Process ticker ─────────────────────────────── */
+.proc-names {
+  display: flex;
+  gap: 12px;
+  flex-wrap: nowrap;
+  overflow: hidden;
+  margin-top: 3px;
+}
+.proc-chip {
+  display: flex;
+  align-items: baseline;
+  gap: 3px;
+  font-size: 10px;
+  flex-shrink: 0;
+}
+.chip-name { color: rgba(255,255,255,0.52); }
+.chip-cpu  { color: var(--c-warn); }
+
+/* ── Popovers ───────────────────────────────────── */
+.popover {
+  position: fixed;
+  background: var(--c-pop);
+  border: 0.5px solid rgba(255,255,255,0.14);
+  border-radius: 9px;
+  padding: 13px 15px;
+  z-index: 9999;
+  display: none;
+  min-width: 220px;
+  max-height: 320px;
+  overflow-y: auto;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255,255,255,0.12) transparent;
+}
+.popover.visible { display: block; }
+.popover::-webkit-scrollbar { width: 4px; }
+.popover::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.12); border-radius: 2px; }
+
+.pop-title {
+  font-size: 9px;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--c-muted);
+  margin-bottom: 10px;
+}
+
+.pop-kv {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+  font-size: 10px;
+  color: var(--c-muted);
+  padding: 2px 0;
+}
+.pop-kv .v {
+  text-align: right;
+  color: var(--c-text);
+}
+
+.pop-div {
+  height: 0.5px;
+  background: rgba(255,255,255,0.07);
+  margin: 7px 0;
+}
+
+/* Bar rows inside popovers */
+.pop-bar-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin-bottom: 5px;
+}
+.pop-blabel {
+  font-size: 10px;
+  color: var(--c-muted);
+  width: 52px;
+  flex-shrink: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.pop-bar {
+  flex: 1;
+  height: 5px;
+  background: rgba(255,255,255,0.07);
+  border-radius: 3px;
+  overflow: hidden;
+}
+.pop-fill {
+  height: 100%;
+  border-radius: 3px;
+  transition: width 0.6s ease;
+}
+.pop-pct {
+  font-size: 10px;
+  width: 34px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+/* Process table */
+.proc-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 10px;
+}
+.proc-table th {
+  text-align: left;
+  color: rgba(255,255,255,0.22);
+  font-weight: 400;
+  font-size: 9px;
+  letter-spacing: 0.07em;
+  padding-bottom: 6px;
+  border-bottom: 0.5px solid rgba(255,255,255,0.08);
+}
+.proc-table td {
+  padding: 3px 0;
+  border-bottom: 0.5px solid rgba(255,255,255,0.05);
+}
+.proc-table tr:last-child td { border-bottom: none; }
+.col-pid  { color: rgba(255,255,255,0.22) !important; padding-right: 8px; }
+.col-name { color: rgba(255,255,255,0.72) !important; max-width: 140px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.col-user { color: rgba(255,255,255,0.30) !important; padding: 0 10px; }
+.col-cpu  { text-align: right !important; color: var(--c-warn) !important; }
+.col-mem  { text-align: right !important; color: var(--c-info) !important; padding-left: 10px; }
+
+/* ── Status indicator ───────────────────────────── */
+#status-dot {
+  position: fixed;
+  top: 5px;
+  right: 10px;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--c-ok);
+  opacity: 0.35;
+  transition: opacity 0.4s, background 0.4s;
+  pointer-events: none;
+}
+#status-dot.error { background: var(--c-crit); opacity: 0.9; }
+#status-dot.pulse { opacity: 0.7; }
+</style>
+</head>
+<body>
+
+<div id="rail"></div>
+<div id="status-dot"></div>
+
+<!-- Popover panels — positioned by JS, content updated on each poll -->
+<div class="popover" id="pop-sysinfo"></div>
+<div class="popover" id="pop-cpu"></div>
+<div class="popover" id="pop-memory"></div>
+<div class="popover" id="pop-disk"></div>
+<div class="popover" id="pop-battery"></div>
+<div class="popover" id="pop-temperature"></div>
+<div class="popover" id="pop-processes" style="min-width:360px;"></div>
+<div class="popover" id="pop-users"></div>
+
+<script>
+'use strict';
+
+// ─── State ────────────────────────────────────────────────────────────────────
+let CONFIG  = null;
+let METRICS = null;
+let pinned  = null;   // key of currently-pinned segment
+
+// ─── Colour helpers ───────────────────────────────────────────────────────────
+function cssVar(name) {
+  return getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+}
+
+function metricColor(val, warn, crit) {
+  const c = CONFIG?.theme?.colors || {};
+  if (val >= crit) return c.crit || cssVar('--c-crit');
+  if (val >= warn) return c.warn || cssVar('--c-warn');
+  return c.ok || cssVar('--c-ok');
+}
+
+// Battery is reversed: low % is bad
+function battColor(pct) {
+  if (pct <= 15) return cssVar('--c-crit');
+  if (pct <= 30) return cssVar('--c-warn');
+  return cssVar('--c-ok');
+}
+
+// ─── Apply config-defined colours as CSS variables ───────────────────────────
+function applyTheme(cfg) {
+  const root = document.documentElement;
+  const t    = cfg.theme || {};
+  const c    = t.colors || {};
+  const set  = (v, val) => val && root.style.setProperty(v, val);
+  set('--c-ok',   c.ok);
+  set('--c-warn', c.warn);
+  set('--c-crit', c.crit);
+  set('--c-info', c.info);
+  set('--c-bg',   t.background);
+  set('--c-pop',  t.popover_background);
+}
+
+// ─── Reusable HTML fragments ──────────────────────────────────────────────────
+function kv(label, value, valueStyle) {
+  const style = valueStyle ? ` style="${valueStyle}"` : '';
+  return `<div class="pop-kv"><span>${label}</span><span class="v"${style}>${value}</span></div>`;
+}
+
+function miniBar(pct, color) {
+  const w = Math.min(100, Math.max(0, pct));
+  return `<div class="mini-bar"><div class="mini-fill" style="width:${w}%;background:${color};"></div></div>`;
+}
+
+function popBar(label, pct, warn, crit, suffix) {
+  const w   = Math.min(100, Math.max(0, pct));
+  const col = metricColor(pct, warn, crit);
+  const sfx = suffix !== undefined ? suffix : '%';
+  return `<div class="pop-bar-row">
+    <div class="pop-blabel">${label}</div>
+    <div class="pop-bar"><div class="pop-fill" style="width:${w}%;background:${col};"></div></div>
+    <div class="pop-pct" style="color:${col};">${pct.toFixed(1)}${sfx}</div>
+  </div>`;
+}
+
+function popBarRaw(label, pct, color) {
+  const w = Math.min(100, Math.max(0, pct));
+  return `<div class="pop-bar-row">
+    <div class="pop-blabel">${label}</div>
+    <div class="pop-bar"><div class="pop-fill" style="width:${w}%;background:${color};"></div></div>
+    <div class="pop-pct" style="color:${color};">${pct.toFixed(0)}%</div>
+  </div>`;
+}
+
+function div() { return '<div class="pop-div"></div>'; }
+
+function formatSecs(s) {
+  const h = Math.floor(s / 3600);
+  const m = Math.floor((s % 3600) / 60);
+  return `${h}h ${m}m`;
+}
+
+// ─── Build/update the rail ────────────────────────────────────────────────────
+function buildRail() {
+  if (!CONFIG) return;
+  const panels  = CONFIG.panels || {};
+  const rail    = document.getElementById('rail');
+  rail.innerHTML = '';
+
+  const enabled = Object.entries(panels)
+    .filter(([, v]) => v.enabled)
+    .sort(([, a], [, b]) => (a.order || 99) - (b.order || 99));
+
+  enabled.forEach(([key, pcfg], i) => {
+    if (i > 0) rail.insertAdjacentHTML('beforeend', '<div class="sep"></div>');
+    const seg = buildSegment(key, pcfg);
+    if (seg) rail.appendChild(seg);
+  });
+
+  // Restore pinned highlight after DOM rebuild
+  if (pinned) {
+    const el = rail.querySelector(`[data-key="${pinned}"]`);
+    if (el) {
+      el.classList.add('pinned');
+      positionPopover(pinned, el);
+    }
+  }
+}
+
+function makeSeg(key, popKey, html, extraClass) {
+  const seg = document.createElement('div');
+  seg.className = 'seg' + (extraClass ? ' ' + extraClass : '');
+  seg.dataset.key = key;
+  seg.dataset.pop = popKey || ('pop-' + key);
+  seg.innerHTML   = html;
+  seg.addEventListener('mouseenter', () => { if (!pinned) openPop(key, seg); });
+  seg.addEventListener('mouseleave', () => { if (!pinned) closePop(key); });
+  seg.addEventListener('click', e => { e.stopPropagation(); togglePin(key, seg); });
+  return seg;
+}
+
+function buildSegment(key, pcfg) {
+  const M = METRICS || {};
+  switch (key) {
+
+    case 'uptime': {
+      const d   = M.sysinfo || {};
+      const col = cssVar('--c-info');
+      return makeSeg('uptime', 'pop-sysinfo', `
+        <div class="seg-label">System</div>
+        <div class="seg-val" style="font-size:12px;color:${col};">${d.hostname || '—'}</div>
+        <div class="seg-sub">up ${d.uptime || '—'}</div>`);
+    }
+
+    case 'cpu': {
+      const d    = M.cpu || {};
+      const warn = pcfg.warn_threshold ?? 70;
+      const crit = pcfg.crit_threshold ?? 90;
+      const pct  = d.overall ?? 0;
+      const col  = metricColor(pct, warn, crit);
+      const la   = d.load_avg ? d.load_avg.map(x => x.toFixed(2)).join(' · ') : '—';
+      return makeSeg('cpu', 'pop-cpu', `
+        <div class="seg-label">CPU</div>
+        <div class="seg-val" style="color:${col};">${pct.toFixed(1)}%</div>
+        ${miniBar(pct, col)}
+        <div class="seg-sub">load ${la}</div>`);
+    }
+
+    case 'memory': {
+      const d    = M.memory || {};
+      const warn = pcfg.warn_threshold ?? 75;
+      const crit = pcfg.crit_threshold ?? 90;
+      const pct  = d.percent ?? 0;
+      const col  = metricColor(pct, warn, crit);
+      return makeSeg('memory', 'pop-memory', `
+        <div class="seg-label">Memory</div>
+        <div class="seg-val" style="color:${col};">${pct.toFixed(1)}%</div>
+        ${miniBar(pct, col)}
+        <div class="seg-sub">${d.used_str || '—'} / ${d.total_str || '—'}</div>`);
+    }
+
+    case 'disk': {
+      const d     = M.disk || {};
+      const parts = d.partitions || [];
+      const main  = parts[0] || {};
+      const warn  = pcfg.warn_threshold ?? 80;
+      const crit  = pcfg.crit_threshold ?? 95;
+      const pct   = main.percent ?? 0;
+      const col   = metricColor(pct, warn, crit);
+      return makeSeg('disk', 'pop-disk', `
+        <div class="seg-label">Disk</div>
+        <div class="seg-val" style="color:${col};">${pct.toFixed(0)}%</div>
+        ${miniBar(pct, col)}
+        <div class="seg-sub">${main.used_str || '—'} / ${main.total_str || '—'}</div>`);
+    }
+
+    case 'battery': {
+      const d = M.battery || {};
+      if (!d.available) {
+        return makeSeg('battery', 'pop-battery', `
+          <div class="seg-label">Battery</div>
+          <div class="seg-val" style="color:var(--c-muted);">N/A</div>
+          <div class="seg-sub">no battery</div>`);
+      }
+      const pct  = d.percent ?? 0;
+      const col  = battColor(pct);
+      const icon = d.plugged ? ' ⚡' : '';
+      return makeSeg('battery', 'pop-battery', `
+        <div class="seg-label">Battery</div>
+        <div class="seg-val" style="color:${col};">${pct.toFixed(0)}%${icon}</div>
+        ${miniBar(pct, col)}
+        <div class="seg-sub">${d.plugged ? 'Charging' : 'On battery'}</div>`);
+    }
+
+    case 'temperature': {
+      const d    = M.temperature || {};
+      const warn = pcfg.warn_threshold ?? 75;
+      const crit = pcfg.crit_threshold ?? 90;
+      const temp = d.value;
+      const col  = temp != null ? metricColor(temp, warn, crit) : 'var(--c-muted)';
+      const label = temp != null
+        ? (temp >= crit ? 'Critical' : temp >= warn ? 'High' : 'Normal')
+        : 'N/A';
+      return makeSeg('temperature', 'pop-temperature', `
+        <div class="seg-label">Temp</div>
+        <div class="seg-val" style="color:${col};">${temp != null ? temp.toFixed(1) + '°C' : '—'}</div>
+        <div style="height:3px;margin-top:5px;"></div>
+        <div class="seg-sub">${label}</div>`);
+    }
+
+    case 'processes': {
+      const procs = M.processes || [];
+      const chips = procs.slice(0, 7).map(p =>
+        `<div class="proc-chip"><span class="chip-name">${p.name}</span><span class="chip-cpu">${p.cpu.toFixed(0)}%</span></div>`
+      ).join('');
+      return makeSeg('processes', 'pop-processes', `
+        <div class="seg-label">Top Processes</div>
+        <div class="proc-names">${chips || '<span style="color:var(--c-muted)">—</span>'}</div>`,
+        'seg-proc');
+    }
+
+    case 'users': {
+      const users = M.users || [];
+      const names = users.map(u => u.name).join(', ') || '—';
+      const col   = cssVar('--c-info');
+      return makeSeg('users', 'pop-users', `
+        <div class="seg-label">Users</div>
+        <div class="seg-val" style="font-size:12px;color:${col};">${names}</div>
+        <div class="seg-sub">${users.length} logged in</div>`);
+    }
+
+    default:
+      return null;
+  }
+}
+
+// ─── Update popover content ───────────────────────────────────────────────────
+function updatePopovers() {
+  if (!CONFIG || !METRICS) return;
+  const panels = CONFIG.panels || {};
+  const M      = METRICS;
+
+  // Sysinfo / uptime
+  {
+    const d = M.sysinfo || {};
+    document.getElementById('pop-sysinfo').innerHTML = `
+      <div class="pop-title">System Info</div>
+      ${kv('Hostname', d.hostname || '—')}
+      ${kv('OS',       d.os       || '—')}
+      ${kv('Arch',     d.arch     || '—')}
+      ${kv('CPUs',     d.cpu_count ?? '—')}
+      ${div()}
+      ${kv('Boot',   d.boot_time || '—')}
+      ${kv('Uptime', d.uptime    || '—')}`;
+  }
+
+  // CPU
+  {
+    const d    = M.cpu || {};
+    const pc   = panels.cpu || {};
+    const warn = pc.warn_threshold ?? 70;
+    const crit = pc.crit_threshold ?? 90;
+    const cores = (d.per_core || [])
+      .map((p, i) => popBar(`Core ${i}`, p, warn, crit))
+      .join('');
+    const la = (d.load_avg || []).map(x => x.toFixed(2)).join('  ·  ');
+    document.getElementById('pop-cpu').innerHTML = `
+      <div class="pop-title">CPU</div>
+      ${popBar('Overall', d.overall ?? 0, warn, crit)}
+      ${div()}
+      ${cores}
+      ${div()}
+      ${kv('Frequency', d.frequency ? d.frequency + ' MHz' : '—')}
+      ${kv('Max clock', d.freq_max  ? d.freq_max  + ' MHz' : '—')}
+      ${kv('Load avg',  la || '—')}`;
+  }
+
+  // Memory
+  {
+    const d    = M.memory || {};
+    const pm   = panels.memory || {};
+    const warn = pm.warn_threshold ?? 75;
+    const crit = pm.crit_threshold ?? 90;
+    document.getElementById('pop-memory').innerHTML = `
+      <div class="pop-title">Memory</div>
+      ${popBar('RAM', d.percent ?? 0, warn, crit)}
+      ${kv('', (d.used_str || '—') + ' / ' + (d.total_str || '—'))}
+      ${div()}
+      ${d.active   ? kv('Active',   d.active)   : ''}
+      ${d.inactive ? kv('Inactive', d.inactive) : ''}
+      ${d.wired    ? kv('Wired',    d.wired)    : ''}
+      ${div()}
+      ${popBar('Swap', d.swap_percent ?? 0, warn, crit)}
+      ${kv('', (d.swap_used_str || '—') + ' / ' + (d.swap_total_str || '—'))}`;
+  }
+
+  // Disk
+  {
+    const d    = M.disk || {};
+    const pd   = panels.disk || {};
+    const warn = pd.warn_threshold ?? 80;
+    const crit = pd.crit_threshold ?? 95;
+    const parts = (d.partitions || []).map(p =>
+      popBar(p.mount, p.percent, warn, crit) +
+      kv('', p.used_str + ' / ' + p.total_str)
+    ).join(div());
+    document.getElementById('pop-disk').innerHTML = `
+      <div class="pop-title">Disk</div>
+      ${parts || kv('Status', 'No partitions')}
+      ${div()}
+      ${kv('Read',  d.read_rate  || '—')}
+      ${kv('Write', d.write_rate || '—')}`;
+  }
+
+  // Battery
+  {
+    const d = M.battery || {};
+    if (!d.available) {
+      document.getElementById('pop-battery').innerHTML =
+        `<div class="pop-title">Battery</div>${kv('Status', 'No battery detected')}`;
+    } else {
+      const pct  = d.percent ?? 0;
+      const col  = battColor(pct);
+      document.getElementById('pop-battery').innerHTML = `
+        <div class="pop-title">Battery & Power</div>
+        ${popBarRaw('Charge', pct, col)}
+        ${div()}
+        ${kv('Status', d.plugged ? '⚡ Charging' : '🔋 On battery', 'color:' + col)}
+        ${d.secs_left   ? kv('Time left',   formatSecs(d.secs_left)) : ''}
+        ${d.cycle_count ? kv('Cycle count', d.cycle_count) : ''}
+        ${d.health      ? kv('Health', d.health,
+            'color:' + (d.health === 'Normal' ? 'var(--c-ok)' : 'var(--c-warn)')) : ''}`;
+    }
+  }
+
+  // Temperature
+  {
+    const d    = M.temperature || {};
+    const pt   = panels.temperature || {};
+    const warn = pt.warn_threshold ?? 75;
+    const crit = pt.crit_threshold ?? 90;
+    const temp = d.value;
+    const col  = temp != null ? metricColor(temp, warn, crit) : 'var(--c-muted)';
+    document.getElementById('pop-temperature').innerHTML = `
+      <div class="pop-title">Temperature</div>
+      ${kv('CPU', temp != null ? temp.toFixed(1) + ' °C' : '—', 'color:' + col)}
+      ${div()}
+      ${kv('Warn at', warn + ' °C')}
+      ${kv('Crit at', crit + ' °C', 'color:var(--c-crit)')}`;
+  }
+
+  // Processes
+  {
+    const procs = M.processes || [];
+    const pp    = panels.processes || {};
+    const sort  = pp.sort_by || 'cpu';
+    const rows  = procs.map(p => `<tr>
+      <td class="col-pid">${p.pid}</td>
+      <td class="col-name">${escHtml(p.name)}</td>
+      <td class="col-user">${escHtml(p.user)}</td>
+      <td class="col-cpu">${p.cpu.toFixed(1)}</td>
+      <td class="col-mem">${p.mem.toFixed(1)}</td>
+    </tr>`).join('');
+    document.getElementById('pop-processes').innerHTML = `
+      <div class="pop-title">Top Processes — sorted by ${sort}</div>
+      <table class="proc-table">
+        <tr>
+          <th>PID</th>
+          <th>Process</th>
+          <th>User</th>
+          <th style="text-align:right">CPU%</th>
+          <th style="text-align:right">MEM%</th>
+        </tr>
+        ${rows || '<tr><td colspan="5" style="color:var(--c-muted);padding-top:6px;">No data</td></tr>'}
+      </table>`;
+  }
+
+  // Users
+  {
+    const users = M.users || [];
+    const rows  = users.length
+      ? users.map(u => kv(escHtml(u.name), `${escHtml(u.terminal)} · since ${u.since}`)).join('')
+      : kv('—', 'No users logged in');
+    document.getElementById('pop-users').innerHTML =
+      `<div class="pop-title">Logged-in Users</div>${rows}`;
+  }
+}
+
+function escHtml(s) {
+  return String(s)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;');
+}
+
+// ─── Popover positioning ──────────────────────────────────────────────────────
+function positionPopover(key, segEl) {
+  const popId = key === 'uptime' ? 'pop-sysinfo' : 'pop-' + key;
+  const pop   = document.getElementById(popId);
+  if (!pop || !pop.classList.contains('visible')) return;
+
+  const segRect = segEl.getBoundingClientRect();
+  const railH   = parseInt(getComputedStyle(document.documentElement).getPropertyValue('--rail-h'));
+  const gap      = 8;
+
+  pop.style.top    = (railH + gap) + 'px';
+  pop.style.bottom = 'auto';
+
+  const popW  = pop.offsetWidth;
+  let   left  = segRect.left;
+  const right = window.innerWidth;
+  if (left + popW > right - 8) left = right - popW - 8;
+  if (left < 8) left = 8;
+  pop.style.left = left + 'px';
+}
+
+// ─── Open / close / pin ───────────────────────────────────────────────────────
+function openPop(key, segEl) {
+  const popId = key === 'uptime' ? 'pop-sysinfo' : 'pop-' + key;
+  const pop   = document.getElementById(popId);
+  if (!pop) return;
+  pop.classList.add('visible');
+  // Need offsetWidth so we can clamp — show it first, then position
+  requestAnimationFrame(() => positionPopover(key, segEl));
+}
+
+function closePop(key) {
+  const popId = key === 'uptime' ? 'pop-sysinfo' : 'pop-' + key;
+  const pop   = document.getElementById(popId);
+  if (pop) pop.classList.remove('visible');
+}
+
+function togglePin(key, segEl) {
+  if (pinned === key) {
+    closePop(key);
+    segEl.classList.remove('pinned');
+    pinned = null;
+    return;
+  }
+  if (pinned) {
+    closePop(pinned);
+    document.querySelectorAll('.seg.pinned').forEach(s => s.classList.remove('pinned'));
+  }
+  pinned = key;
+  segEl.classList.add('pinned');
+  openPop(key, segEl);
+}
+
+// Click outside rail → unpin
+document.addEventListener('click', () => {
+  if (!pinned) return;
+  closePop(pinned);
+  document.querySelectorAll('.seg.pinned').forEach(s => s.classList.remove('pinned'));
+  pinned = null;
+});
+
+// ─── Data fetching ────────────────────────────────────────────────────────────
+async function fetchConfig() {
+  try {
+    const r = await fetch('/config');
+    CONFIG  = await r.json();
+    applyTheme(CONFIG);
+  } catch (e) {
+    console.error('Config fetch failed:', e);
+  }
+}
+
+async function fetchMetrics() {
+  const dot = document.getElementById('status-dot');
+  try {
+    const r = await fetch('/metrics');
+    METRICS = await r.json();
+    dot.className = 'pulse';
+    setTimeout(() => { dot.className = ''; }, 300);
+    return true;
+  } catch (e) {
+    dot.className = 'error';
+    return false;
+  }
+}
+
+async function refresh() {
+  // Re-read config on each cycle (hot-reload support)
+  await fetchConfig();
+  await fetchMetrics();
+  buildRail();
+  updatePopovers();
+}
+
+async function init() {
+  await refresh();
+  const interval = Math.max(1, CONFIG?.refresh_interval ?? 2) * 1000;
+  setInterval(refresh, interval);
+}
+
+init();
+</script>
+</body>
+</html>

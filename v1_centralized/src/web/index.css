@@ -1,0 +1,237 @@
+:root {
+    --primary-color: #00ff41;
+    --secondary-color: #003b00;
+    --bg-color: #000;
+    --text-glow: 0 0 5px #00ff41, 0 0 10px #00ff41;
+    --warn-color: #ffcc00;
+    --crit-color: #ff3b30;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    background-color: var(--bg-color);
+    color: var(--primary-color);
+    font-family: 'Courier New', Courier, monospace;
+    height: 100vh;
+    width: 100vw;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+/* CRT Scanline Effect */
+body::after {
+    content: " ";
+    display: block;
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    right: 0;
+    background: linear-gradient(rgba(18, 16, 16, 0) 50%, rgba(0, 0, 0, 0.25) 50%), linear-gradient(90deg, rgba(255, 0, 0, 0.06), rgba(0, 255, 0, 0.02), rgba(0, 0, 255, 0.06));
+    z-index: 2;
+    background-size: 100% 2px, 3px 100%;
+    pointer-events: none;
+}
+
+header {
+    height: 40px;
+    border-bottom: 2px solid var(--primary-color);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0 20px;
+    background: var(--secondary-color);
+}
+
+.mfd-container {
+    flex: 1;
+    display: grid;
+    grid-template-columns: 350px 1fr 400px;
+    gap: 10px;
+    padding: 10px;
+    background: #000;
+}
+
+.pane {
+    border: 2px solid var(--primary-color);
+    background: rgba(0, 59, 0, 0.1);
+    display: flex;
+    flex-direction: column;
+    position: relative;
+}
+
+.pane-header {
+    background: var(--secondary-color);
+    padding: 5px 10px;
+    font-size: 0.8rem;
+    font-weight: bold;
+    border-bottom: 1px solid var(--primary-color);
+    display: flex;
+    justify-content: space-between;
+}
+
+.pane-footer {
+    background: rgba(0, 59, 0, 0.2);
+    padding: 10px;
+    border-top: 1px solid var(--primary-color);
+    flex-shrink: 0;
+}
+
+.pane-content {
+    flex: 1;
+    padding: 15px;
+    overflow: hidden;
+    display: flex;
+    flex-direction: column;
+}
+
+/* Tactical Map Styling (Leaflet) */
+#tactical-map {
+    height: 100%;
+    width: 100%;
+    background: #000;
+    filter: invert(100%) hue-rotate(90deg) brightness(0.6) contrast(1.4);
+}
+
+.leaflet-container {
+    background: #000 !important;
+}
+
+.leaflet-tile-pane {
+    opacity: 0.6;
+}
+
+.stat-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 15px;
+    margin-bottom: 20px;
+}
+
+.stat-row {
+    display: flex;
+    flex-direction: column;
+}
+
+.stat-divider {
+    font-size: 0.6rem;
+    color: var(--primary-color);
+    border-bottom: 1px solid rgba(0, 255, 65, 0.2);
+    margin: 15px 0 10px 0;
+    padding-bottom: 2px;
+    letter-spacing: 0.1em;
+    opacity: 0.8;
+}
+
+.stat-row-compact {
+    display: flex;
+    justify-content: space-between;
+    font-size: 0.8rem;
+    margin-bottom: 5px;
+}
+
+.stat-label {
+    font-size: 0.7rem;
+    color: rgba(0, 255, 65, 0.6);
+    text-transform: uppercase;
+}
+
+.stat-value {
+    font-size: 1.1rem;
+    text-shadow: var(--text-glow);
+    animation: phosphor-glow 2s infinite ease-in-out;
+}
+
+@keyframes phosphor-glow {
+    0% { opacity: 0.8; }
+    50% { opacity: 1; }
+    100% { opacity: 0.8; }
+}
+
+.progress-bar {
+    height: 4px;
+    background: rgba(0, 255, 65, 0.1);
+    margin-top: 5px;
+}
+
+.progress-fill {
+    height: 100%;
+    background: var(--primary-color);
+    box-shadow: 0 0 10px var(--primary-color);
+}
+
+.mfd-scroll-pane {
+    overflow-y: auto !important;
+    scrollbar-width: thin;
+    scrollbar-color: var(--primary-color) transparent;
+}
+
+.terminal-pane {
+    height: 180px;
+    background: #000;
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 0.7rem;
+    padding: 10px;
+    overflow-y: auto;
+    border-top: 2px solid rgba(0, 255, 65, 0.2);
+}
+
+.msg-item { margin-bottom: 4px; line-height: 1.2; }
+.msg-item.GS { color: #00ff41; }
+.msg-item.SAT { color: #00d4ff; }
+.msg-item.AI { color: #ffcc00; }
+.msg-item.CRIT { color: #ff3b30; font-weight: bold; }
+
+/* OpenPBS qstat table styling */
+.qstat-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.75rem;
+}
+
+.qstat-table th {
+    text-align: left;
+    color: var(--primary-color);
+    border-bottom: 1px solid rgba(0, 255, 65, 0.3);
+    padding-bottom: 5px;
+    font-weight: normal;
+}
+
+.qstat-table td {
+    padding: 6px 0;
+    border-bottom: 1px solid rgba(0, 255, 65, 0.05);
+}
+
+.status-R { color: var(--primary-color); font-weight: bold; }
+.status-Q { color: #888; }
+.status-C { color: #00d4ff; }
+
+.btn-mfd {
+    width: 100%;
+    background: var(--secondary-color);
+    color: var(--primary-color);
+    border: 1px solid var(--primary-color);
+    padding: 10px;
+    margin-bottom: 10px;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 0.8rem;
+    font-weight: bold;
+    text-transform: uppercase;
+}
+
+.btn-mfd:hover {
+    background: var(--primary-color);
+    color: var(--bg-color);
+}
+
+.btn-danger {
+    border-color: var(--crit-color);
+    color: var(--crit-color);
+}

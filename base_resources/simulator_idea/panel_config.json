@@ -1,0 +1,36 @@
+{
+  "panel": {
+    "title": "Orbios.AI Simulator v1.0",
+    "font_size": 10,
+    "width_px": 360
+  },
+  "display": {
+  "dir": "/users/bengbennett/Applications/incoming",
+  "poll_interval_ms": 5000,
+  "substitutions": {
+    "<m>":  "-",
+    "<p>":  ".",
+    "<c>":  ", ",
+    "<sp>": " ",
+    "<pc>": "%"
+  }
+  },
+  "buttons": [
+    { "id": 1,  "note": "reserved — RESET (wipes all flag files)" },
+    { "id": 2,  "note": "reserved — RELOAD (reloads config, files untouched)" },
+    { "id": 3,  "type": "latched",       "label": ["Loss of ", "Signal  "], "latch_label": ["Loss of ", "Signal  "], "file": { "dir": "/users/bengbennett/Applications", "name": "LOS.dat" }, "me": [4] },
+    { "id": 4,  "type": "latched",       "label": ["AOS     ", "        "],                                          "file": { "dir": "/users/bengbennett/Applications", "name": "AOS.dat" }, "me": [3] },
+    { "id": 5,  "type": "latched",       "label": ["Low     ", "Power   "], "latch_label": ["down    ", "clocking"], "file": { "dir": "/users/bengbennett/Applications", "name": "LowPower.dat" }, "me": [6] },
+    { "id": 6,  "type": "latched",       "label": ["Full    ", "Power   "], "latch_label": ["Runing  ", "        "], "file": { "dir": "/users/bengbennett/Applications", "name": "FullPower.dat" }, "me": [5] },
+    { "id": 7,  "type": "latched",       "label": ["Orbit   ", "Plus 100"], "latch_label": ["Going Up", "        "], "file": { "dir": "/users/bengbennett/Applications", "name": "OrbitPlus100.dat" }, "me": [8] },
+    { "id": 8,  "type": "latched",       "label": ["Orbit   ", "Restore "],                                          "file": { "dir": "/users/bengbennett/Applications", "name": "OrbitRestore.dat" }, "me": [7] },
+    { "id": 9,  "type": "latched",       "label": ["Thermals", "        "], "latch_label": ["Thermal ", "Anomoly "], "file": { "dir": "/users/bengbennett/Applications", "name": "ThermalAnomoly.dat" } },
+    { "id": 10, "type": "instantaneous", "label": [" TBD    ", "        "], "file": { "dir": "/users/bengbennett/Applications", "name": "" } },
+    { "id": 11, "type": "instantaneous", "label": [" TBD    ", "        "], "file": { "dir": "/users/bengbennett/Applications", "name": "" } },
+    { "id": 12, "type": "latched",       "label": ["Initiate", "WILDFIRE"], "file": { "dir": "/users/bengbennett/Applications", "name": "WildFire.dat" } },
+    { "id": 13, "type": "instantaneous", "label": [" TBD    ", "        "], "file": { "dir": "/users/bengbennett/Applications", "name": "" } },
+    { "id": 14, "type": "instantaneous", "label": [" TBD    ", "        "], "file": { "dir": "/users/bengbennett/Applications", "name": "" } },
+    { "id": 15, "type": "instantaneous", "label": [" TBD    ", "        "], "file": { "dir": "/users/bengbennett/Applications", "name": "" } },
+    { "id": 16, "type": "instantaneous", "label": [" TBD    ", "        "], "file": { "dir": "/users/bengbennett/Applications", "name": "" } }
+  ]
+}

@@ -1,0 +1,106 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>ORBIOS — TACTICAL GEOSPATIAL</title>
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <style>
+        body, html, #map { height: 100%; margin: 0; background: #000; overflow: hidden; }
+        #map { 
+            filter: invert(100%) hue-rotate(90deg) brightness(0.4) contrast(1.4); 
+        }
+        .leaflet-container { background: #000 !important; }
+        .overlay-label {
+            position: absolute; top: 10px; left: 10px; z-index: 1000;
+            color: #00ff41; font-family: monospace; font-size: 10px;
+            background: rgba(0,0,0,0.8); padding: 5px; border: 1px solid #00ff41;
+            letter-spacing: 1px;
+        }
+        /* Pulsing Fire Animation */
+        @keyframes pulse {
+            0% { transform: scale(0.8); opacity: 0.8; }
+            50% { transform: scale(1.5); opacity: 0.3; }
+            100% { transform: scale(0.8); opacity: 0.8; }
+        }
+        .fire-pulse {
+            background: #ff4444;
+            border-radius: 50%;
+            width: 20px; height: 20px;
+            animation: pulse 1s infinite;
+            border: 2px solid #fff;
+        }
+    </style>
+</head>
+<body>
+    <div class="overlay-label">TACTICAL GEOSPATIAL VIEW // SAT-TRACKING ACTIVE</div>
+    <div id="map"></div>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script>
+        const map = L.map('map', { 
+            center: [20, 0], zoom: 3, 
+            zoomControl: false, attributionControl: false 
+        });
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(map);
+
+        let satMarker = null;
+        let missionMarkers = {};
+
+        // Custom Satellite Icon
+        const satIcon = L.divIcon({
+            html: '<div style="color:#00ff41; font-size:20px;">▲</div>',
+            className: 'sat-icon',
+            iconSize: [20, 20]
+        });
+
+        async function pollTelemetry() {
+            try {
+                const r = await fetch('http://localhost:5005/data/telemetry/sat_01.json?t=' + Date.now());
+                if (r.ok) {
+                    const data = await r.json();
+                    console.log("Telemetry Received:", data);
+                    if (!satMarker) {
+                        satMarker = L.marker([data.lat, data.lon], {icon: satIcon}).addTo(map);
+                        map.setView([data.lat, data.lon], 3);
+                    } else {
+                        satMarker.setLatLng([data.lat, data.lon]);
+                    }
+                } else {
+                    console.error("Telemetry Fetch Failed:", r.status);
+                }
+            } catch(e) {
+                console.error("Telemetry Error:", e);
+            }
+        }
+
+        async function pollMission() {
+            try {
+                // In a real file-bus, we might check a signals list. 
+                // For this PoC, we check specific mission files.
+                const files = ['HEAT_SPIKE_ACTIVE.json', 'FIRE_CONFIRMED.json'];
+                
+                for (const fname of files) {
+                    const r = await fetch('http://localhost:5005/signals/mission/' + fname + '?t=' + Date.now());
+                    if (r.ok) {
+                        const data = await r.json();
+                        if (!missionMarkers[fname]) {
+                            const icon = L.divIcon({
+                                className: 'fire-pulse',
+                                html: ''
+                            });
+                            missionMarkers[fname] = L.marker([data.lat, data.lon], {icon: icon}).addTo(map);
+                            map.flyTo([data.lat, data.lon], 5);
+                        }
+                    } else {
+                        if (missionMarkers[fname]) {
+                            map.removeLayer(missionMarkers[fname]);
+                            delete missionMarkers[fname];
+                        }
+                    }
+                }
+            } catch(e) {}
+        }
+
+        setInterval(pollTelemetry, 1000);
+        setInterval(pollMission, 2000);
+    </script>
+</body>
+</html>

@@ -1,0 +1,56 @@
+{
+  "updateInterval": 5,
+  "trailLength": 1080,
+  "showSAA": false,
+  "saaAltitude": 400,
+
+  "satellites":
+  [
+    { "noradId": 25544, "name": "ISS",			      "trailColor": "255, 107, 53", 	"dotColor": "#ff6b35", "useISSImage":    true },
+    { "noradId": 20580, "name": "Hubble",		      "trailColor": "100, 200, 255", 	"dotColor": "#64c8ff", "useHubbleImage": true },
+    { "noradId": 65159, "name": "MetOp-SG A1 ",	  "trailColor": "255, 80, 120",	  "dotColor": "#ff5078"				                  }
+  ],
+
+  "labels":
+  [
+    { "lat": 51.5074,  "lon": -0.1278,  "text": "London",        	"showPass": false, 			"fontSize": 12, "color": "#ffffffff", "dotColor": "#ffffffff", "dotSize": 3 },
+    { "lat": 40.7128,  "lon": -74.006,  "text": "New York",      	"showPass": true,  			"fontSize": 12, "color": "#ffffffff", "dotColor": "#ffffffff", "dotSize": 3 },
+    { "lat": 35.6762,  "lon": 139.6503, "text": "Tokyo",         	"showPass": true,  			"fontSize": 12, "color": "#ffffffff", "dotColor": "#ffffffff", "dotSize": 3 },
+    { "lat": 55.7558,  "lon": 37.6176,  "text": "Moscow",        	"showPass": true,  			"fontSize": 12, "color": "#ffffffff", "dotColor": "#ffffffff", "dotSize": 3 },
+    { "lat": 28.6139,  "lon": 77.209,   "text": "New Delhi",     	"showPass": true,  			"fontSize": 12, "color": "#ffffffff", "dotColor": "#ffffffff", "dotSize": 3 },
+    { "lat": 47.2184,  "lon": -1.5536,  "text": "Nantes",        	"showPass": true,  			"fontSize": 12, "color": "#ffffffff", "dotColor": "#ffffffff", "dotSize": 3 },
+    { "lat": -23.551,  "lon": -46.633,  "text": "São Paulo",     	"showPass": true,  			"fontSize": 12, "color": "#ffffffff", "dotColor": "#ffffffff", "dotSize": 3 },
+    { "lat": 1.3521,   "lon": 103.820,  "text": "Singapore",     	"showPass": true,  			"fontSize": 12, "color": "#ffffffff", "dotColor": "#ffffffff", "dotSize": 3 },
+    { "lat": -27.7313, "lon": 28.21837, "text": "Pretoria",      	"showPass": true,  			"fontSize": 12, "color": "#ffffffff", "dotColor": "#ffffffff", "dotSize": 3 },
+    { "lat": 39.93191, "lon": 116.4031, "text": "Beijing",       	"showPass": true,  			"fontSize": 12, "color": "#ffffffff", "dotColor": "#ffffffff", "dotSize": 3 },
+    { "lat": 33.5346,  "lon": -81.9409, "text": "Greenville",     "showPass": true,  			"fontSize": 12, "color": "#ffffffff", "dotColor": "#ffffffff", "dotSize": 3 },
+
+    { "lat": 35.426,   "lon": -116.89,  "text": "DSN - Goldstone",                  		  "fontSize": 12, "color": "#de73ffff", "dotColor": "#de73ffff", "dotSize": 3 },
+    { "lat": 40.431,   "lon": -4.28,    "text": "DSN - Robledo",  		                    "fontSize": 12, "color": "#de73ffff", "dotColor": "#de73ffff", "dotSize": 3 },
+    { "lat": -35.40,   "lon": 148.982,  "text": "DSN - Canberra",     				       		  "fontSize": 12, "color": "#de73ffff", "dotColor": "#de73ffff", "dotSize": 3 },
+
+    { "lat": 64.978,   "lon": -147.51,  "text": "LEO - Fairbanks",    	        "showPass": true, "minElev": 10, 	"fontSize": 11, "color": "#effd5fff", "dotColor": "#effd5fff", "dotSize": 3 },
+    { "lat": 21.57,    "lon": -158.25,  "text": "LEO - Kaena Point",  	        "showPass": true, "minElev": 10, 	"fontSize": 11, "color": "#effd5fff", "dotColor": "#effd5fff", "dotSize": 3 },
+    { "lat": -7.970,   "lon": -14.398,  "text": "LEO - Ascension",    	        "showPass": true, "minElev": 10, 	"fontSize": 11, "color": "#effd5fff", "dotColor": "#effd5fff", "dotSize": 3 },
+    { "lat": 78.230,   "lon": 15.4070,  "text": "LEO - Svalbard",     	        "showPass": true, "minElev": 10, 	"fontSize": 11, "color": "#effd5fff", "dotColor": "#effd5fff", "dotSize": 3 },
+    { "lat": -2.995,   "lon": 40.1940,  "text": "LEO - Malindi",      	        "showPass": true, "minElev": 10, 	"fontSize": 11, "color": "#effd5fff", "dotColor": "#effd5fff", "dotSize": 3 },
+   
+    { "lat": 67.858,   "lon": 20.9660,  "text": "LEO - Kiruna (ESTRACK)",       "showPass": true, "minElev": 10, 	"fontSize": 11, "color": "#effd5fff", "dotColor": "#effd5fff", "dotSize": 3 },
+    { "lat": -35.78,   "lon": -69.398,  "text": "LEO - Malargue (ESTRACK)",     "showPass": true, "minElev": 10, 	"fontSize": 11, "color": "#effd5fff", "dotColor": "#effd5fff", "dotSize": 3 },
+    { "lat": 5.252,    "lon": -52.806,  "text": "LEO - Kourou (ESTRACK)",       "showPass": true, "minElev": 10,  "fontSize": 11, "color": "#effd5fff", "dotColor": "#effd5fff", "dotSize": 3 },
+    { "lat": 36.998,   "lon": -25.139,  "text": "LEO - Santa Maria (ESTRACK)",  "showPass": true, "minElev": 10,  "fontSize": 11, "color": "#effd5fff", "dotColor": "#effd5fff", "dotSize": 3 },
+    { "lat": 50.008,   "lon": 5.148,    "text": "LEO - Redu (ESTRACK)",         "showPass": true, "minElev": 10,  "fontSize": 11, "color": "#effd5fff", "dotColor": "#effd5fff", "dotSize": 3 },
+    { "lat": -31.048,  "lon": 116.192,  "text": "LEO - New Norcia (ESTRACK)",   "showPass": true, "minElev": 10,  "fontSize": 11, "color": "#effd5fff", "dotColor": "#effd5fff", "dotSize": 3 },
+    { "lat": 40.453,   "lon": -4.368,   "text": "LEO - Cebreros (ESTRACK)",     "showPass": true, "minElev": 10,  "fontSize": 11, "color": "#00000000", "dotColor": "#00000000", "dotSize": 3 },
+
+    { "lat": 28.538,   "lon": -80.650,  "text": "Kennedy SC",    	"showPass": false,			"fontSize": 11, "color": "#00e5ffff", "dotColor": "#00e5ffff", "dotSize": 3 },
+    { "lat": 5.1694,   "lon": -52.6841, "text": "Guiana SC",     	"showPass": false,			"fontSize": 11, "color": "#00e5ffff", "dotColor": "#00e5ffff", "dotSize": 3 },
+    { "lat": 60.8181,  "lon": -0.7924,  "text": "SaxaVord SC",   	"showPass": false,			"fontSize": 11, "color": "#00e5ffff", "dotColor": "#00e5ffff", "dotSize": 3 },
+    { "lat": 40.9600,  "lon": 100.290,  "text": "Jiquan LC",   	  "showPass": false,			"fontSize": 11, "color": "#00e5ffff", "dotColor": "#00e5ffff", "dotSize": 3 },
+    { "lat": 19.690,   "lon": 110.950,  "text": "Wenchang SLS",   "showPass": false,			"fontSize": 11, "color": "#00e5ffff", "dotColor": "#00e5ffff", "dotSize": 3 },
+    { "lat": 45.976,   "lon": 63.305,   "text": "Baikonur",      	"showPass": false,			"fontSize": 11, "color": "#00e5ffff", "dotColor": "#00e5ffff", "dotSize": 3 },
+
+    { "lat": 29.559,   "lon": -95.09,   "text": "JSC",      	    "showPass": false,			"fontSize": 11, "color": "#00e5ffff", "dotColor": "#00e5ffff", "dotSize": 3 },
+    { "lat": 49.866,   "lon": 8.6167,   "text": "ESOC",      	    "showPass": false,			"fontSize": 11, "color": "#00000000", "dotColor": "#00000000", "dotSize": 3 }
+  ]
+}
