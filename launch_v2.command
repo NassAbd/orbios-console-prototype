@@ -1,7 +1,7 @@
 #!/bin/bash
 # ORBIOS TACTICAL CONSOLE V2 — LAUNCHER (CLEAN REBOOT)
 
-PROJECT_DIR="/Users/abdallahnassur/dev/projects/orbios_prototype"
+PROJECT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 cd "$PROJECT_DIR"
 
 echo "Terminating old ORBIOS processes..."

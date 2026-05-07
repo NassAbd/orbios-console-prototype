@@ -74,7 +74,7 @@ This script will:
 ### 3. Open the Interface
 Open **Firefox** and navigate to:
 ```
-file:///Users/abdallahnassur/dev/projects/orbios_prototype/index.html
+file:///path/to/cloned/repo/orbios_prototype/index.html
 ```
 
 ---
