@@ -21,7 +21,8 @@ for p in [MISSION, LOGS, DATA / "telemetry"]:
 # --- Onboard Memory Buffer State ---
 STATE = {
     "onboard_anomaly": None,     # Unconfirmed raw sensor logs
-    "onboard_confirmed": None    # Confirmed AI wildfire logs
+    "onboard_confirmed": None,   # Confirmed AI wildfire logs
+    "pbs_job": None              # Active OpenPBS job state machine
 }
 
 # --- Orbital Setup ---
@@ -63,6 +64,7 @@ def clean_signals():
     for f in LOGS.iterdir(): f.unlink()
     STATE["onboard_anomaly"] = None
     STATE["onboard_confirmed"] = None
+    STATE["pbs_job"] = None
 
 def is_aos_active():
     """Check if the Ground Station AOS (Acquisition of Signal) connection is established"""
@@ -70,6 +72,15 @@ def is_aos_active():
         if f.name.startswith("AOS_GS01"):
             return True
     return False
+
+def update_pbs_file():
+    queue_path = MISSION / "pbs_queue.json"
+    if STATE["pbs_job"]:
+        with open(queue_path, "w") as f:
+            json.dump([STATE["pbs_job"]], f)
+    else:
+        if queue_path.exists():
+            queue_path.unlink()
 
 def run_sim():
     log_event("ORBIOS SIMULATOR ONLINE")
@@ -98,7 +109,58 @@ def run_sim():
                         json.dump(fire_data, jf)
                     STATE["onboard_confirmed"] = None
 
-            # 4. Check for incoming commands
+            # 4. Advance PBS Job State Machine
+            if STATE["pbs_job"]:
+                job = STATE["pbs_job"]
+                if job["status"] == "QUEUED":
+                    job["ticks"] = job.get("ticks", 0) + 1
+                    if job["ticks"] >= 2: # 1 second queued latency
+                        job["status"] = "RUNNING"
+                        job["ticks"] = 0
+                        log_event(f"PBS: JOB {job['job_id']} DISPATCHED TO WORKSTATION-01 via SSH")
+                elif job["status"] == "RUNNING":
+                    job["progress"] = job.get("progress", 0) + 25 # 25% increments per tick
+                    if job["progress"] >= 100:
+                        job["status"] = "COMPLETED"
+                        job["progress"] = 100
+                        job["ticks"] = 0
+                        
+                        # --- Process actual Wildfire Confirmation on job success ---
+                        active_fire = None
+                        if STATE["onboard_anomaly"]:
+                            active_fire = STATE["onboard_anomaly"]
+                        elif (MISSION / "HEAT_SPIKE_ACTIVE.json").exists():
+                            try:
+                                with open(MISSION / "HEAT_SPIKE_ACTIVE.json", "r") as rj:
+                                    active_fire = json.load(rj)
+                            except Exception:
+                                pass
+
+                        if active_fire:
+                            active_fire["status"] = "CONFIRMED"
+                            
+                            if aos_active:
+                                log_event("AI_AGENT: WILDFIRE CONFIRMED - DOWNLINKED", active_fire)
+                                with open(MISSION / "FIRE_CONFIRMED.json", "w") as jf:
+                                    json.dump(active_fire, jf)
+                                if (MISSION / "HEAT_SPIKE_ACTIVE.json").exists():
+                                    (MISSION / "HEAT_SPIKE_ACTIVE.json").unlink()
+                            else:
+                                log_event("AI_AGENT: WILDFIRE CONFIRMED - STORED", active_fire)
+                                STATE["onboard_confirmed"] = active_fire
+                                STATE["onboard_anomaly"] = None
+                                if (MISSION / "HEAT_SPIKE_ACTIVE.json").exists():
+                                    (MISSION / "HEAT_SPIKE_ACTIVE.json").unlink()
+                        else:
+                            log_event("AI_AGENT: ERROR - NO DETECTED ANOMALY FOUND")
+                elif job["status"] == "COMPLETED":
+                    job["ticks"] = job.get("ticks", 0) + 1
+                    if job["ticks"] >= 4: # Stay visible for 2 seconds then flush
+                        STATE["pbs_job"] = None
+
+                update_pbs_file()
+
+            # 5. Check for incoming commands
             found_files = list(MISSION.iterdir())
             for f in found_files:
                 fname = f.name
@@ -123,40 +185,19 @@ def run_sim():
                     f.unlink()
 
                 elif fname.startswith("START_AI"):
-                    # Check if we have any active raw fire (on disk or in buffer)
-                    active_fire = None
-                    if STATE["onboard_anomaly"]:
-                        active_fire = STATE["onboard_anomaly"]
-                    elif (MISSION / "HEAT_SPIKE_ACTIVE.json").exists():
-                        try:
-                            with open(MISSION / "HEAT_SPIKE_ACTIVE.json", "r") as rj:
-                                active_fire = json.load(rj)
-                        except Exception:
-                            pass
-
-                    if active_fire:
-                        log_event("AI_AGENT: INITIATING EDGE INFERENCE")
-                        time.sleep(2) # Simulated edge inference lag
-                        
-                        active_fire["status"] = "CONFIRMED"
-                        
-                        if aos_active:
-                            log_event("AI_AGENT: WILDFIRE CONFIRMED - DOWNLINKED", active_fire)
-                            with open(MISSION / "FIRE_CONFIRMED.json", "w") as jf:
-                                json.dump(active_fire, jf)
-                            
-                            # Clean up unconfirmed raw maps markers
-                            if (MISSION / "HEAT_SPIKE_ACTIVE.json").exists():
-                                (MISSION / "HEAT_SPIKE_ACTIVE.json").unlink()
-                        else:
-                            log_event("AI_AGENT: WILDFIRE CONFIRMED - STORED", active_fire)
-                            STATE["onboard_confirmed"] = active_fire
-                            STATE["onboard_anomaly"] = None
-                            
-                            if (MISSION / "HEAT_SPIKE_ACTIVE.json").exists():
-                                (MISSION / "HEAT_SPIKE_ACTIVE.json").unlink()
-                    else:
-                        log_event("AI_AGENT: ERROR - NO DETECTED ANOMALY FOUND")
+                    # Start OpenPBS scheduling process instead of simple synchronous lag
+                    if not STATE["pbs_job"]:
+                        job_id = f"PBS-{random.randint(1000, 9999)}"
+                        STATE["pbs_job"] = {
+                            "job_id": job_id,
+                            "task": "WILDFIRE_EDGE_INFERENCE",
+                            "status": "QUEUED",
+                            "node": "WORKSTATION-01 (via SSH)",
+                            "progress": 0,
+                            "ticks": 0
+                        }
+                        log_event(f"PBS: SUBMITTING JOB {job_id} TO TASK SCHEDULER")
+                        update_pbs_file()
                     f.unlink()
                     
                 elif fname.startswith("RESET"):

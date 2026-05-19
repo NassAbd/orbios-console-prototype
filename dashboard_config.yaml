@@ -75,9 +75,9 @@ panels:
     crit_threshold: 95
 
   network:
-    enabled: false
+    enabled: true
     order: 5
-    title: "Network"
+    title: "OpenPBS Queue"
     interfaces: []
     show_packets: false
     show_errors: false

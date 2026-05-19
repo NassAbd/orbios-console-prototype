@@ -282,6 +282,16 @@ def metrics():
         except Exception:
             pass
 
+    # ── OpenPBS Job Queue ───────────────────────────────────────────────────
+    pbs_queue_path = BASE / "signals" / "mission" / "pbs_queue.json"
+    data["pbs_queue"] = []
+    if pbs_queue_path.exists():
+        try:
+            with open(pbs_queue_path, "r") as f:
+                data["pbs_queue"] = json.load(f)
+        except Exception:
+            pass
+
     return jsonify(data)
 
 # ── Main ──────────────────────────────────────────────────────────────────────

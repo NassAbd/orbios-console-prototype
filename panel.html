@@ -66,13 +66,13 @@ body {
 
 .display-screen {
   font-family: monospace;
-  font-size: 13px;
+  font-size: 11px;
   line-height: 1.25;
   color: #7fff82;
   white-space: pre;
   overflow: hidden;
   display: block;
-  width: 40ch;
+  width: 50ch;
 }
 
 .display-divider {
@@ -198,7 +198,7 @@ body {
 <script>
 const API      = 'http://localhost:8765/api';
 const ROWS     = 20;
-const COLS     = 40;
+const COLS     = 50;
 
 // ─── DEFAULT CONFIG ───────────────────────────────────────────────────────────
 const DEFAULT_CONFIG = {
@@ -348,7 +348,10 @@ async function pollDir() {
   for (const filename of newFiles) {
     seenFiles.add(filename);
     const processed = applySubstitutions(filename);
-    const line      = nowTime() + '  ' + processed;
+    let line = processed;
+    if (!/^\d{2}:\d{2}:\d{2}/.test(processed)) {
+      line = nowTime() + '  ' + processed;
+    }
     displayAppend(line);
   }
 }
