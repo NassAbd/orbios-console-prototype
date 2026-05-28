@@ -133,8 +133,8 @@ if __name__ == "__main__":
         print(f"ERROR: panel.html not found at {PANEL_HTML}")
         sys.exit(1)
 
+    socketserver.TCPServer.allow_reuse_address = True
     with socketserver.TCPServer(("", PORT), Handler) as httpd:
-        httpd.allow_reuse_address = True
         print("Control Panel server running.")
         print(f"Open in Firefox:  http://localhost:{PORT}")
         print("Press Ctrl+C to stop.\n")
