@@ -1,24 +1,25 @@
-# OrbiOS Tactical Console — Wildfire Detection PoC (V2)
+# OrbiOS Tactical Console — Wildfire & Oil Leak Detection PoC
 
-An ultra-responsive, signal-driven space tactical operations cockpit designed for satellite monitoring and wildfire anomaly edge-classification. This Proof of Concept (PoC) leverages a high-fidelity **Distributed File-Bus Architecture** where independent telemetry rails, tactical geospatial screens, and industrial command panels coordinate asynchronously through localized filesystem state signals.
+An ultra-responsive, signal-driven space tactical operations cockpit designed for satellite monitoring and wildfire/oil leak anomaly edge-classification. This Proof of Concept (PoC) leverages a high-fidelity **Distributed File-Bus Architecture** where independent telemetry rails, tactical geospatial screens, and industrial command panels coordinate asynchronously through localized filesystem state signals.
 
 ---
 
 ## 🎯 PoC Objective
 
-The core goal of this prototype is to demonstrate a mission-critical tactical console split into three logical views, orchestrating complex orbital sensor tasks without centralized direct database/API state coupling:
+The core goal of this prototype is to demonstrate a mission-critical tactical console split into three logical views, orchestrating complex orbital sensor tasks:
 1. **System Monitor (Top Window)**: Live hardware metrics and automated system-wide critical alerts.
-2. **Tactical Geospatial (Center-Left Window)**: Real-time satellite propagation tracker using high-precision orbital physics (Skyfield), complete with coverage footprints and dynamic hazard visualization.
+2. **Tactical Geospatial (Center-Left Window)**: Real-time satellite propagation tracker focused statically over the Spain/Portugal region, showing dynamic hazard popup notifications.
 3. **Control Panel (Center-Right Window)**: Hardware-styled command console simulating physical buttons, toggles, and direct terminal logging.
 
 ---
 
 ## 🛰️ Operational Concept (CONOPS) & Features
 
-### 📡 Store-and-Forward Downlink Buffering
-The satellite can operate in disconnected environments. This PoC implements realistic orbital communications constraints using **Acquisition of Signal (AOS)** handshakes:
-* **Direct Transmission**: With **AOS GS-01** active, raw sensor pings and AI edge results stream straight to Earth in real-time, instantly rendering alerts and visual hazard loops on the map.
-* **Onboard Buffering (Store-and-Forward)**: When **AOS GS-01** is offline (disconnected), sensor detections and AI-confirmed classifications are securely queued inside the satellite's onboard registers. The Earth interfaces remain clean and silent. The exact millisecond the connection link is restored, the buffered queue flushes to the ground, triggering high-intensity map visuals and flashing warning alerts on the system dashboard.
+### 📡 Direct Downlink & Static Footprint
+* **Static Footprint Focus:** The satellite orbit is configured to remain stationary over the Spain/Portugal sector (Latitude: `40.2000` N, Longitude: `-7.8000` E, Altitude: `420` km), allowing constant and focused surveillance of high-risk regions.
+* **Direct Telemetry Downlink:** Detections are downlinked directly from the satellite to the ground station in real-time. No manual AOS (Acquisition of Signal) connection step is needed.
+* **Transient Visual Alerts (3-Second Expiration):** To ensure a dynamic and uncluttered map view, wildfire and oil leak visual alert popups are automatically cleared/dismissed from the screen exactly 3 seconds after they are received.
+* **Emergency Dashboard Warning:** When a critical hazard is active, the System Monitor cockpit rail flashes neon red with a simplified message: `⚡ CRITICAL WARNING ⚡`.
 
 ---
 
@@ -27,28 +28,35 @@ The satellite can operate in disconnected environments. This PoC implements real
 ```bash
 orbios_prototype/
 ├── index.html                  # Main Cockpit Wrapper (tiles the 3 sub-windows via iframes)
-├── launch_v2.command           # Entrypoint launcher script (coordinates & boots the architecture)
-├── orbios_sim.py               # Satellite Simulator (handles Skyfield physics, logic & buffering)
+├── run.command                 # Unified launcher script (pre-compiles C code, runs servers, launches UI)
+├── orbios_sim.py               # Satellite Simulator (tracks active alert timers, unlinks expired alerts)
 │
 ├── dashboard_server.py         # Flask telemetry backend (serves localhost:5005 & CORS file gateway)
 ├── dashboard_config.yaml       # Telemetry thresholds and component settings
-├── dashboard.html              # System Monitor Top Rail UI (flashes emergency-red on alerts)
+├── dashboard.html              # System Monitor Top Rail UI (flashes emergency-red with critical warnings)
 │
 ├── panel_server.py             # HTTP Control Panel server (handles localhost:8765 filesystem api)
 ├── panel_config.json           # Interactive Button and register mapping definitions
 ├── panel.html                  # Control Panel frontend (simulates physical LCD + buttons)
 │
-├── tactical_map.html           # Geospatial Leaflet map (renders satellite footprint, markers & popups)
+├── tactical_map.html           # Geospatial Leaflet map (renders satellite footprint and transient popups)
 │
 ├── signals/                    # THE FILE-BUS (Inter-process nervous system)
-│   ├── mission/                # Active signals (e.g. INIT_FIRE, START_AI, AOS_GS01.dat)
+│   ├── mission/                # Active signals (e.g. START_AI, RESET, FIRE_CONFIRMED.json)
 │   └── logs/                   # Dynamic operational log files read by the Panel LCD Screen
 │
 ├── data/
 │   └── telemetry/              # Live computed orbital coordinates (sat_01.json)
 │
-├── base_resources/             # Legacy reference files (preserved & untouched)
-└── v1_centralized/             # Archive of the previous monolithic version (V1)
+├── algo_part/                  # C-PIPELINE ALGORITHM
+│   ├── call1/                  # Pre-processing and post-processing mock .dat files
+│   ├── input.csv               # Raw sensor data read by the C program
+│   ├── main2.c                 # C entrypoint simulating satellite OS pre/post-processing files
+│   ├── payload.c & payload.h   # C edge inference risk-scoring logic
+│   └── output/                 # Folder where C program writes detected hazard .dat files
+│
+└── tests/
+    └── test_simulation.py      # Automated Pytest suite checking coordinates and 3s expiration logic
 ```
 
 ---
@@ -61,45 +69,37 @@ Ensure you have the Python virtual environment manager `uv` installed. If missin
 curl -sSf https://get.uv.dev | sh
 ```
 
-### 2. Boot the Console
-From the project directory, execute the interactive launch command:
+### 2. Boot the Console & Open the UI
+From the project root directory, run the unified executable command:
 ```bash
-bash launch_v2.command
+./run.command
 ```
 This script will:
-* Terminate any lingering port bindings.
-* Purge stale filesystem cues.
+* Terminate any lingering port bindings on ports 5005 and 8765.
+* Purge stale filesystem cues in `signals/`.
+* Pre-compile the C algorithm source code into `algo_part/main2` using `gcc`.
 * Boot the telemetry server (`localhost:5005`), panel server (`localhost:8765`), and simulator daemon under local isolated environment wrappers (`uv run`).
-
-### 3. Open the Interface
-Open **Firefox** and navigate to:
-```
-file:///path/to/cloned/repo/orbios_prototype/index.html
-```
+* **Automatically open the dashboard UI (`index.html`) in your default web browser.**
 
 ---
 
 ## 🕹️ Demonstration Scenarios
 
-### Scenario A: Delayed Downlink (Buffered Queue) — *Highly Recommended for Showcases*
-1. **Prepare**: Verify **AOS GS-01 (BTN 05)** is **OFF** (the button is dark gray, indicating no communication signal).
-2. **Scan**: Click **TRIGGER FIRE (BTN 03)**.
-   * *Observation*: The Control Panel logs `STORED ONBOARD (LINK OFFLINE)`. The tactical map remains completely silent and the satellite footprint travels empty.
-3. **Analyze**: Click **RUN AI ENGINE (BTN 04)**.
-   * *Observation*: The onboard system finishes edge processing. The screen logs `WILDFIRE CONFIRMED - STORED`. Ground units are still completely unaware (map and top dashboard remain normal).
-4. **Establish Link**: Turn **AOS GS-01 (BTN 05)** **ON** (toggles to latched Amber).
-   * *Result*: **Instant Uplink Trigger!** The buffered alert drops onto the Earth terminal. The map immediately flies to the threat location, rendering a high-intensity pulsing crimson wildfire circle, and the top cockpit rail triggers flashing neon-red emergency alarms.
+### Scenario A: Running the Edge Detection Pipeline
+1. Click the **RUN DEMO** button on the Control Panel (Button 4).
+2. Observe the Control Panel logging each preprocessing step chronologically (`Ephemeris signal reception`, `Real time position tracking`, etc.).
+3. Watch the map view:
+   - When the edge-AI processes a wildfire or oil leak from the C pipeline, a details popup box directly opens on the map at the threat coordinates.
+   - After exactly 3 seconds, the popup vanishes cleanly as the simulator deletes the expired alert signal.
+   - Meanwhile, the top System Monitor flashes neon red displaying `⚡ CRITICAL WARNING ⚡`.
 
-### Scenario B: Real-Time Stream
-1. Latch **AOS GS-01 (BTN 05)** **ON** first.
-2. Press **TRIGGER FIRE (BTN 03)**.
-   * *Result*: Direct downlink streams raw amber indicators with tooltips directly onto the map.
-3. Press **RUN AI ENGINE (BTN 04)**.
-   * *Result*: After 2 seconds of edge calculation, the hazard turns to critical red, displaying live threat statistics and initiating flashing cockpit alarms.
-4. Press **PURGE SIGNALS (BTN 06)** or **RESET (BTN 01)** to wipe files and reset the simulator back to base orbital tracking.
+### Scenario B: Resetting/Purging the Demo
+1. Press the **PURGE SIGNALS** button on the Control Panel (Button 6) at any point during execution.
+2. The running C program process is terminated instantly, all log files are deleted, active map popups are cleared, and the cockpit transitions back to a clean `IDLE` state.
 
 ---
 
 ## 🛑 How to Stop
-To shut down the entire V2 server loop gracefully:
-* Go to the shell terminal where `launch_v2.command` is running and press **`Ctrl + C`**. All background daemons will be killed automatically.
+To shut down all running servers gracefully:
+* Go to the terminal window where `./run.command` is active and press **`Ctrl + C`**. All background Python daemons will be killed automatically.
+
