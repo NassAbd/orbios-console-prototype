@@ -1,0 +1,37 @@
+l'ordre des fichiers qui doivent apparaitre dans le simulateur : 
+Ephemeris_signal_reception.dat
+Real_time_position_tracking.dat
+Onboard_clock_synchronization.dat
+Star_tracker_attitude_extraction.dat
+AOCS_filter_recalculation.dat
+Trajectory_propagation_verification.dat
+Nominal_state_maintenance.dat
+*ICI IL Y A 4 FICHIERS DE FEU DE FORETS ET JE SAIS PAS COMMENT ILS S'APPELLENT MAIS JE PEUX REGARDER ÇA PLUS TARD*
+Sensors_retargeting.dat
+Attitude_acquisition.dat
+Guidance_calculation.dat
+Target_setpoint_calculation.dat
+Previous_pointing_mode_deactivation.dat
+Actuator_commanding.dat
+Controlled_deceleration.dat
+Target_acquisition.dat
+Attitude_settling.dat
+Nominal_mode_restoration.dat
+OIL_LEAK_LAT41.122_LON-8.895.dat
+
+---
+
+ils ont un écart de temps d'apparition dans le dossier "output" de 3 secondes entre chaque fichier
+
+---
+
+l'ordre des fichiers wildfire: 
+WILDFIRE_LAT41.458_LON-7.782.dat
+FALSE_ALERT_LAT40.444_LON-7.915.dat
+WILDFIRE_LAT41.319_LON-7.879.dat
+FALSE_ALERT_LAT41.328_LON-7.821.dat
+WILDFIRE_LAT40.942_LON-7.419.dat
+FALSE_ALERT_LAT40.444_LON-7.915.dat
+
+---
+

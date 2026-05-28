@@ -1,6 +1,6 @@
 {
   "panel": {
-    "title": "ORBIOS MISSION CTRL v2.1",
+    "title": "ORBIOS MISSION CTRL v2.2",
     "font_size": 10,
     "width_px": 360
   },
@@ -14,9 +14,9 @@
   "buttons": [
     { "id": 1,  "note": "reserved — RESET" },
     { "id": 2,  "note": "reserved — RELOAD" },
-    { "id": 3,  "type": "instantaneous", "label": ["TRIGGER ", "FIRE    "], "file": { "dir": "signals/mission", "name": "INIT_FIRE" } },
-    { "id": 4,  "type": "instantaneous", "label": ["RUN AI  ", "ENGINE  "], "file": { "dir": "signals/mission", "name": "START_AI" } },
-    { "id": 5,  "type": "latched",       "label": ["AOS     ", "GS-01   "], "file": { "dir": "signals/mission", "name": "AOS_GS01.dat" } },
+    { "id": 3,  "type": "instantaneous", "label": ["        ", "        "], "file": { "dir": "signals/mission", "name": "" } },
+    { "id": 4,  "type": "instantaneous", "label": ["RUN     ", "DEMO    "], "file": { "dir": "signals/mission", "name": "START_AI" } },
+    { "id": 5,  "type": "instantaneous", "label": ["        ", "        "], "file": { "dir": "signals/mission", "name": "" } },
     { "id": 6,  "type": "instantaneous", "label": ["PURGE   ", "SIGNALS "], "file": { "dir": "signals/mission", "name": "RESET" } },
     { "id": 7,  "type": "instantaneous", "label": ["        ", "        "], "file": { "dir": "signals/mission", "name": "" } },
     { "id": 8,  "type": "instantaneous", "label": ["        ", "        "], "file": { "dir": "signals/mission", "name": "" } },

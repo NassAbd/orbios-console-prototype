@@ -7,7 +7,6 @@ Then open: http://localhost:8765
 
 import http.server
 import json
-import os
 import pathlib
 import socketserver
 import sys
@@ -18,8 +17,8 @@ PANEL_HTML = pathlib.Path(__file__).parent / "panel.html"
 
 class Handler(http.server.BaseHTTPRequestHandler):
 
-    def log_message(self, fmt, *args):
-        print(f"  {self.address_string()}  {fmt % args}")
+    def log_message(self, format, *args):
+        print(f"  {self.address_string()}  {format % args}")
 
     # ── routing ──────────────────────────────────────────────────────────────
 
@@ -135,9 +134,9 @@ if __name__ == "__main__":
 
     with socketserver.TCPServer(("", PORT), Handler) as httpd:
         httpd.allow_reuse_address = True
-        print(f"Control Panel server running.")
+        print("Control Panel server running.")
         print(f"Open in Firefox:  http://localhost:{PORT}")
-        print(f"Press Ctrl+C to stop.\n")
+        print("Press Ctrl+C to stop.\n")
         try:
             httpd.serve_forever()
         except KeyboardInterrupt:

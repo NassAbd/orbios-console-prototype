@@ -71,6 +71,21 @@
             border: 2.5px solid #fff;
             box-shadow: 0 0 15px rgba(226,75,74,0.6);
         }
+
+        /* Confirmed Oil Leak Animation (Neon Blue Pulsing) */
+        @keyframes blue-pulse {
+            0% { transform: scale(0.8); opacity: 1; box-shadow: 0 0 0 0px rgba(106, 176, 232, 0.8); }
+            70% { transform: scale(1.6); opacity: 0.3; box-shadow: 0 0 0 25px rgba(106, 176, 232, 0); }
+            100% { transform: scale(0.8); opacity: 0; box-shadow: 0 0 0 0px rgba(106, 176, 232, 0); }
+        }
+        .oil-leak-pulse {
+            background: #6ab0e8;
+            border-radius: 50%;
+            width: 22px; height: 22px;
+            animation: blue-pulse 0.9s infinite ease-out;
+            border: 2.5px solid #fff;
+            box-shadow: 0 0 15px rgba(106,176,232,0.6);
+        }
     </style>
 </head>
 <body>
@@ -79,7 +94,7 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
         const map = L.map('map', { 
-            center: [20, 0], zoom: 3, 
+            center: [40.2, -7.8], zoom: 6, 
             zoomControl: false, attributionControl: false 
         });
         L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(map);
@@ -113,7 +128,7 @@
                             weight: 1,
                             dashArray: '4, 4'
                         }).addTo(map);
-                        map.setView([data.lat, data.lon], 3);
+                        map.setView([data.lat, data.lon], 6);
                     } else {
                         // Smoothly update positions
                         satMarker.setLatLng([data.lat, data.lon]);
@@ -129,7 +144,8 @@
             try {
                 const files = [
                     { name: 'HEAT_SPIKE_ACTIVE.json', type: 'unconfirmed' },
-                    { name: 'FIRE_CONFIRMED.json', type: 'confirmed' }
+                    { name: 'FIRE_CONFIRMED.json', type: 'confirmed' },
+                    { name: 'OIL_LEAK_ACTIVE.json', type: 'oilleak' }
                 ];
                 
                 for (const item of files) {
@@ -138,19 +154,6 @@
                         const data = await r.json();
                         
                         if (!missionMarkers[item.name]) {
-                            // Assign respective pulsing CSS class based on confirmation state
-                            const markerClass = item.type === 'confirmed' ? 'fire-confirmed-pulse' : 'fire-unconfirmed-pulse';
-                            const icon = L.divIcon({
-                                className: markerClass,
-                                html: '',
-                                iconSize: item.type === 'confirmed' ? [22, 22] : [16, 16],
-                                iconAnchor: item.type === 'confirmed' ? [11, 11] : [8, 8]
-                            });
-
-                            // Create marker
-                            const marker = L.marker([data.lat, data.lon], {icon: icon}).addTo(map);
-                            missionMarkers[item.name] = marker;
-
                             // Formulate detailed tactical telemetry popups
                             let popupText = '';
                             if (item.type === 'confirmed') {
@@ -164,7 +167,7 @@
                                         <b>GS-LINK:</b> ESTABLISHED
                                     </div>
                                 `;
-                            } else {
+                            } else if (item.type === 'unconfirmed') {
                                 popupText = `
                                     <div style="line-height: 1.4;">
                                         <b style="color: #ffaa33; font-size: 11px;">⚠️ RAW HEAT SIGNATURE DETECTED</b><br>
@@ -174,17 +177,34 @@
                                         <b>STATUS:</b> PENDING EDGE-AI RUN
                                     </div>
                                 `;
+                            } else if (item.type === 'oilleak') {
+                                popupText = `
+                                    <div style="line-height: 1.4;">
+                                        <b style="color: #6ab0e8; font-size: 11px;">🚨 CRITICAL OIL LEAK CONFIRMED</b><br>
+                                        <hr style="border: none; border-top: 1px solid #6ab0e8; margin: 4px 0;">
+                                        <b>COORDS:</b> [${data.lat.toFixed(4)}N, ${data.lon.toFixed(4)}E]<br>
+                                        <b>EST. INTENSITY:</b> ${(data.intensity * 100).toFixed(1)}%<br>
+                                        <b>AI EDGE RUNNER:</b> EDGE_INFERENCE_VALIDATED<br>
+                                        <b>GS-LINK:</b> ESTABLISHED
+                                    </div>
+                                `;
                             }
 
-                            marker.bindPopup(popupText).openPopup();
+                            // Create popup directly on map
+                            const popup = L.popup()
+                                .setLatLng([data.lat, data.lon])
+                                .setContent(popupText)
+                                .openOn(map);
+                            
+                            missionMarkers[item.name] = popup;
                             
                             // Fly to and focus map nicely on the fire hazard area
                             map.flyTo([data.lat, data.lon], 5, { animate: true, duration: 1.5 });
                         }
                     } else {
-                        // If file-bus indicates state is cleared, remove the layer
+                        // If file-bus indicates state is cleared, remove the popup
                         if (missionMarkers[item.name]) {
-                            map.removeLayer(missionMarkers[item.name]);
+                            missionMarkers[item.name].remove();
                             delete missionMarkers[item.name];
                         }
                     }

@@ -11,7 +11,12 @@ Started automatically by launch_dashboard.command.
 Visit http://127.0.0.1:5000 once running.
 """
 
-import os, re, sys, time, platform, subprocess
+import os
+import re
+import sys
+import time
+import platform
+import subprocess
 from datetime import datetime, timedelta
 from pathlib import Path
 
@@ -28,7 +33,8 @@ _require("flask")
 _require("psutil")
 _require("pyyaml", "yaml")
 
-import psutil, yaml
+import psutil
+import yaml
 from flask import Flask, jsonify, send_from_directory
 
 # ── Paths ─────────────────────────────────────────────────────────────────────

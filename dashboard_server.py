@@ -1,46 +1,41 @@
 #!/usr/bin/env python3
 """
-Mac System Dashboard — Web Server
+Mac System Dashboard — Web Server (Satellite OBC Mock Integration)
 ──────────────────────────────────
 Reads dashboard_config.yaml and serves live metrics as JSON.
-
-Install dependencies:
-    pip3 install flask psutil pyyaml
-
-Started automatically by launch_dashboard.command.
-Visit http://127.0.0.1:5000 once running.
+Validated against schema.py Pydantic model SystemMetricsResponse.
 """
 
-import os, re, sys, time, platform, subprocess, json
-from datetime import datetime, timedelta
+import sys
+import json
+import yaml
 from pathlib import Path
-
-# ── Dependency check ─────────────────────────────────────────────────────────
-
-def _require(pkg, import_as=None):
-    try:
-        __import__(import_as or pkg)
-    except ImportError:
-        print(f"Missing dependency: {pkg}\n  Run: pip3 install {pkg}")
-        sys.exit(1)
-
-_require("flask")
-_require("psutil")
-_require("pyyaml", "yaml")
-
-import psutil, yaml
 from flask import Flask, jsonify, send_from_directory
+from schema import (
+    SystemMetricsResponse,
+    CpuMetrics,
+    MemoryMetrics,
+    BatteryMetrics,
+    DiskMetrics,
+    DiskPartition,
+    TemperatureMetrics,
+    ProcessInfo,
+    UserInfo,
+    SysInfoMetrics,
+    WildfireAlertStatus,
+    MissionAlert,
+    OpenPBSJob
+)
 
 # ── Paths ─────────────────────────────────────────────────────────────────────
-
 BASE        = Path(__file__).parent
 CONFIG_PATH = BASE / "dashboard_config.yaml"
 HTML_PATH   = BASE / "dashboard.html"
+OUTPUT_DIR  = BASE / "algo_part" / "output"
 
 app = Flask(__name__, static_folder=str(BASE))
 
 # ── CORS ──────────────────────────────────────────────────────────────────────
-
 @app.after_request
 def add_cors(response):
     response.headers["Access-Control-Allow-Origin"] = "*"
@@ -52,36 +47,7 @@ def load_config() -> dict:
     with open(CONFIG_PATH) as f:
         return yaml.safe_load(f)
 
-# ── Helpers ───────────────────────────────────────────────────────────────────
-
-def bytes_human(n: float) -> str:
-    for unit in ("B", "KB", "MB", "GB", "TB"):
-        if abs(n) < 1024:
-            return f"{n:.1f} {unit}"
-        n /= 1024
-    return f"{n:.1f} PB"
-
-# ── Disk I/O rate tracking ────────────────────────────────────────────────────
-
-_prev_io: dict = {"t": None, "r": 0, "w": 0}
-
-def disk_io_rates() -> tuple[float, float]:
-    global _prev_io
-    io  = psutil.disk_io_counters()
-    now = time.time()
-    if not io:
-        return 0.0, 0.0
-    read_rate = write_rate = 0.0
-    if _prev_io["t"] is not None:
-        dt = now - _prev_io["t"]
-        if dt > 0:
-            read_rate  = (io.read_bytes  - _prev_io["r"]) / dt
-            write_rate = (io.write_bytes - _prev_io["w"]) / dt
-    _prev_io = {"t": now, "r": io.read_bytes, "w": io.write_bytes}
-    return max(0, read_rate), max(0, write_rate)
-
 # ── Routes ────────────────────────────────────────────────────────────────────
-
 @app.route("/")
 def index():
     return send_from_directory(str(BASE), "dashboard.html")
@@ -96,218 +62,173 @@ def config_route():
 
 @app.route("/metrics")
 def metrics():
-    cfg    = load_config()
-    panels = cfg.get("panels", {})
-    data   = {}
+    # 1. Determine C program execution phase based on created output files
+    n_files = 0
+    if OUTPUT_DIR.exists():
+        n_files = len([f for f in OUTPUT_DIR.iterdir() if f.name.endswith(".dat")])
+    
+    # Phases mapping:
+    # 0 files -> IDLE
+    # 1-7 files -> PRE-PROCESSING
+    # 8-13 files -> AI INFERENCE
+    # 14-23 files -> POST-PROCESSING
+    # 24+ files -> COMPLETED
+    if n_files == 0:
+        phase = "IDLE"
+    elif n_files <= 7:
+        phase = "PRE-PROCESSING"
+    elif n_files <= 13:
+        phase = "AI INFERENCE"
+    elif n_files < 24:
+        phase = "POST-PROCESSING"
+    else:
+        phase = "COMPLETED"
 
-    # ── CPU ──────────────────────────────────────────────────────────────────
-    pc = panels.get("cpu", {})
-    if pc.get("enabled"):
-        freq = psutil.cpu_freq()
-        try:
-            la = list(os.getloadavg())
-        except AttributeError:
-            la = None
-        data["cpu"] = {
-            "overall":   round(psutil.cpu_percent(interval=None), 1),
-            "per_core":  [round(p, 1) for p in psutil.cpu_percent(percpu=True)],
-            "frequency": round(freq.current) if freq else None,
-            "freq_max":  round(freq.max)     if freq else None,
-            "load_avg":  [round(x, 2) for x in la] if la else None,
-        }
+    # 2. Build mock telemetry/metrics representing the Satellite OBC
+    # CPU Metrics
+    if phase == "IDLE":
+        cpu = CpuMetrics(overall=4.2, per_core=[3.1, 5.0, 2.8, 5.9], frequency=1200, freq_max=3200, load_avg=[0.05, 0.08, 0.12])
+    elif phase == "PRE-PROCESSING":
+        cpu = CpuMetrics(overall=38.5, per_core=[35.2, 42.1, 37.8, 39.0], frequency=2400, freq_max=3200, load_avg=[0.45, 0.38, 0.28])
+    elif phase == "AI INFERENCE":
+        cpu = CpuMetrics(overall=95.8, per_core=[96.5, 94.2, 98.1, 94.4], frequency=3200, freq_max=3200, load_avg=[2.85, 1.95, 1.25])
+    elif phase == "POST-PROCESSING":
+        cpu = CpuMetrics(overall=48.2, per_core=[46.1, 52.3, 44.8, 49.5], frequency=2400, freq_max=3200, load_avg=[0.65, 0.58, 0.48])
+    else: # COMPLETED
+        cpu = CpuMetrics(overall=4.5, per_core=[3.8, 5.1, 3.4, 5.5], frequency=1200, freq_max=3200, load_avg=[0.08, 0.12, 0.18])
 
-    # ── Memory ───────────────────────────────────────────────────────────────
-    pm = panels.get("memory", {})
-    if pm.get("enabled"):
-        vm = psutil.virtual_memory()
-        sw = psutil.swap_memory()
-        data["memory"] = {
-            "percent":       round(vm.percent, 1),
-            "used_str":      bytes_human(vm.used),
-            "total_str":     bytes_human(vm.total),
-            "active":        bytes_human(vm.active)   if hasattr(vm, "active")   else None,
-            "inactive":      bytes_human(vm.inactive) if hasattr(vm, "inactive") else None,
-            "wired":         bytes_human(vm.wired)    if hasattr(vm, "wired")    else None,
-            "swap_percent":  round(sw.percent, 1),
-            "swap_used_str": bytes_human(sw.used),
-            "swap_total_str":bytes_human(sw.total),
-        }
+    # Memory Metrics
+    if phase == "IDLE":
+        memory = MemoryMetrics(percent=24.5, used_str="3.9 GB", total_str="16.0 GB", active="1.2 GB", inactive="2.0 GB", wired="0.7 GB", swap_percent=5.0, swap_used_str="204.8 MB", swap_total_str="4.0 GB")
+    elif phase == "PRE-PROCESSING":
+        memory = MemoryMetrics(percent=45.2, used_str="7.2 GB", total_str="16.0 GB", active="3.5 GB", inactive="2.5 GB", wired="1.2 GB", swap_percent=8.5, swap_used_str="348.2 MB", swap_total_str="4.0 GB")
+    elif phase == "AI INFERENCE":
+        memory = MemoryMetrics(percent=82.7, used_str="13.2 GB", total_str="16.0 GB", active="8.5 GB", inactive="3.1 GB", wired="1.6 GB", swap_percent=42.1, swap_used_str="1.7 GB", swap_total_str="4.0 GB")
+    elif phase == "POST-PROCESSING":
+        memory = MemoryMetrics(percent=54.8, used_str="8.8 GB", total_str="16.0 GB", active="5.1 GB", inactive="2.3 GB", wired="1.4 GB", swap_percent=12.5, swap_used_str="512.0 MB", swap_total_str="4.0 GB")
+    else: # COMPLETED
+        memory = MemoryMetrics(percent=25.1, used_str="4.0 GB", total_str="16.0 GB", active="1.3 GB", inactive="2.0 GB", wired="0.7 GB", swap_percent=5.2, swap_used_str="213.0 MB", swap_total_str="4.0 GB")
 
-    # ── Battery ───────────────────────────────────────────────────────────────
-    pb = panels.get("battery", {})
-    if pb.get("enabled"):
-        batt = psutil.sensors_battery()
-        if batt is None:
-            data["battery"] = {"available": False}
-        else:
-            bd: dict = {
-                "available": True,
-                "percent":   round(batt.percent, 1),
-                "plugged":   batt.power_plugged,
-                "secs_left": int(batt.secsleft)
-                             if not batt.power_plugged and batt.secsleft > 0
-                             else None,
-            }
-            # macOS extras via system_profiler
-            if pb.get("show_cycle_count") or pb.get("show_health"):
-                try:
-                    raw = subprocess.check_output(
-                        ["system_profiler", "SPPowerDataType"],
-                        text=True, timeout=4,
-                    )
-                    for line in raw.splitlines():
-                        if pb.get("show_cycle_count") and "Cycle Count" in line:
-                            bd["cycle_count"] = line.split(":")[-1].strip()
-                        if pb.get("show_health") and "Condition" in line:
-                            bd["health"] = line.split(":")[-1].strip()
-                except Exception:
-                    pass
-            data["battery"] = bd
+    # Battery (Satellite solar/onboard power reserve)
+    if phase == "IDLE":
+        battery = BatteryMetrics(available=True, percent=98.0, plugged=True, secs_left=None, cycle_count="342", health="Normal")
+    elif phase == "PRE-PROCESSING":
+        battery = BatteryMetrics(available=True, percent=85.0, plugged=False, secs_left=3600, cycle_count="342", health="Normal")
+    elif phase == "AI INFERENCE":
+        battery = BatteryMetrics(available=True, percent=68.0, plugged=False, secs_left=1200, cycle_count="342", health="Normal")
+    elif phase == "POST-PROCESSING":
+        battery = BatteryMetrics(available=True, percent=52.0, plugged=False, secs_left=2400, cycle_count="342", health="Normal")
+    else: # COMPLETED
+        battery = BatteryMetrics(available=True, percent=48.0, plugged=True, secs_left=None, cycle_count="342", health="Normal")
 
-    # ── Disk ──────────────────────────────────────────────────────────────────
-    pd = panels.get("disk", {})
-    if pd.get("enabled"):
-        mounts = pd.get("mounts") or []
-        parts  = psutil.disk_partitions()
-        if mounts:
-            parts = [p for p in parts if p.mountpoint in mounts]
-        partitions = []
-        for part in parts:
-            try:
-                u = psutil.disk_usage(part.mountpoint)
-                partitions.append({
-                    "mount":     part.mountpoint,
-                    "percent":   round(u.percent, 1),
-                    "used_str":  bytes_human(u.used),
-                    "total_str": bytes_human(u.total),
-                })
-            except PermissionError:
-                pass
-        rr, wr = disk_io_rates()
-        data["disk"] = {
-            "partitions":  partitions,
-            "read_rate":   bytes_human(rr) + "/s",
-            "write_rate":  bytes_human(wr) + "/s",
-        }
+    # Disk partition (OBC raw storage)
+    read_rate = "0.0 B/s" if phase in ("IDLE", "COMPLETED") else "12.4 MB/s"
+    write_rate = "0.0 B/s" if phase in ("IDLE", "COMPLETED") else "18.2 MB/s"
+    disk = DiskMetrics(
+        partitions=[DiskPartition(mount="/", percent=14.5, used_str="18.2 GB", total_str="128.0 GB")],
+        read_rate=read_rate,
+        write_rate=write_rate
+    )
 
-    # ── Temperature ───────────────────────────────────────────────────────────
-    pt = panels.get("temperature", {})
-    if pt.get("enabled"):
-        temp = None
-        try:
-            sensors = psutil.sensors_temperatures()
-            if sensors:
-                for entries in sensors.values():
-                    if entries:
-                        temp = entries[0].current
-                        break
-        except AttributeError:
-            pass
-        if temp is None:
-            for cmd in [["osx-cpu-temp"], ["istats", "cpu", "--value-only"]]:
-                try:
-                    raw = subprocess.check_output(cmd, text=True, timeout=3).strip()
-                    m   = re.search(r"[\d.]+", raw)
-                    if m:
-                        temp = float(m.group())
-                        break
-                except Exception:
-                    pass
-        data["temperature"] = {"value": round(temp, 1) if temp is not None else None}
+    # Temperature (OBC sensor core temp)
+    if phase == "IDLE":
+        temp_val = 38.5
+    elif phase == "PRE-PROCESSING":
+        temp_val = 52.4
+    elif phase == "AI INFERENCE":
+        temp_val = 84.8
+    elif phase == "POST-PROCESSING":
+        temp_val = 61.2
+    else: # COMPLETED
+        temp_val = 42.1
+    temperature = TemperatureMetrics(value=temp_val)
 
-    # ── Processes ─────────────────────────────────────────────────────────────
-    pp = panels.get("processes", {})
-    if pp.get("enabled"):
-        n        = pp.get("top_n", 8)
-        sort_by  = pp.get("sort_by", "cpu")
-        sort_key = {"cpu": "cpu_percent", "memory": "memory_percent", "name": "name"}.get(
-            sort_by, "cpu_percent"
-        )
-        procs: list = []
-        for p in psutil.process_iter(["pid", "name", "username", "cpu_percent", "memory_percent"]):
-            try:
-                procs.append(p.info)
-            except (psutil.NoSuchProcess, psutil.AccessDenied):
-                pass
-        if sort_key != "name":
-            procs.sort(key=lambda x: x.get(sort_key) or 0, reverse=True)
-        else:
-            procs.sort(key=lambda x: (x.get("name") or "").lower())
-        data["processes"] = [
-            {
-                "pid":  p.get("pid"),
-                "name": p.get("name", "?"),
-                "user": (p.get("username") or "")[:14],
-                "cpu":  round(p.get("cpu_percent") or 0, 1),
-                "mem":  round(p.get("memory_percent") or 0, 1),
-            }
-            for p in procs[:n]
-        ]
+    # Mock satellite OS processes listing
+    processes = []
+    if phase != "IDLE":
+        processes.append(ProcessInfo(pid=1024, name="main2", user="root", cpu=95.0 if phase == "AI INFERENCE" else 40.0, mem=22.4 if phase == "AI INFERENCE" else 5.2))
+        processes.append(ProcessInfo(pid=1025, name="aocs_control", user="root", cpu=22.0 if phase == "POST-PROCESSING" else 2.5, mem=4.2))
+        processes.append(ProcessInfo(pid=1026, name="thermal_mgmt", user="root", cpu=8.5 if phase == "AI INFERENCE" else 1.2, mem=1.1))
+        processes.append(ProcessInfo(pid=1027, name="telemetry_tx", user="root", cpu=12.0 if phase == "PRE-PROCESSING" else 1.0, mem=2.3))
+    processes.append(ProcessInfo(pid=1, name="obc_kernel", user="root", cpu=2.1, mem=1.2))
+    processes.append(ProcessInfo(pid=22, name="payload_mgr", user="root", cpu=4.8, mem=3.5))
 
-    # ── Users ─────────────────────────────────────────────────────────────────
-    pu = panels.get("users", {})
-    if pu.get("enabled"):
-        data["users"] = [
-            {
-                "name":     u.name,
-                "terminal": u.terminal or "-",
-                "since":    datetime.fromtimestamp(u.started).strftime("%H:%M %d %b"),
-            }
-            for u in psutil.users()
-        ]
+    # Logged-in Users
+    users = [
+        UserInfo(name="root", terminal="console", since="May 28 08:00"),
+        UserInfo(name="ai_agent", terminal="ssh", since="May 28 14:30")
+    ]
 
-    # ── System info ───────────────────────────────────────────────────────────
-    ps = panels.get("uptime", {})
-    if ps.get("enabled"):
-        boot   = datetime.fromtimestamp(psutil.boot_time())
-        uptime = str(timedelta(seconds=int((datetime.now() - boot).total_seconds())))
-        data["sysinfo"] = {
-            "hostname":  platform.node(),
-            "os":        f"{platform.system()} {platform.release()}",
-            "arch":      platform.machine(),
-            "boot_time": boot.strftime("%d %b %Y %H:%M"),
-            "uptime":    uptime,
-            "cpu_count": psutil.cpu_count(logical=True),
-        }
+    # Uptime & SysInfo metrics
+    # Hostname: OBC system ID, Uptime: OBC pipeline active phase string
+    sysinfo = SysInfoMetrics(
+        hostname="ORBIOS-OBC-S1",
+        os="Ubuntu Linux 24.04 (RT-Kernel)",
+        arch="aarch64",
+        boot_time="28 May 2026 08:00",
+        uptime=phase,
+        cpu_count=4
+    )
 
-    # ── Wildfire Detection Link ──────────────────────────────────────────────
+    # 3. Check for Active Alerts
     fire_confirmed_path = BASE / "signals" / "mission" / "FIRE_CONFIRMED.json"
-    data["wildfire_alert"] = {
-        "active": fire_confirmed_path.exists()
-    }
-    if data["wildfire_alert"]["active"]:
+    oil_leak_path = BASE / "signals" / "mission" / "OIL_LEAK_ACTIVE.json"
+    
+    active_alert = fire_confirmed_path.exists() or oil_leak_path.exists()
+    alert_status = WildfireAlertStatus(active=active_alert)
+    
+    if fire_confirmed_path.exists():
         try:
             with open(fire_confirmed_path, "r") as f:
-                data["wildfire_alert"]["data"] = json.load(f)
+                alert_status.data = MissionAlert(**json.load(f))
+        except Exception:
+            pass
+    elif oil_leak_path.exists():
+        try:
+            with open(oil_leak_path, "r") as f:
+                alert_status.data = MissionAlert(**json.load(f))
         except Exception:
             pass
 
-    # ── OpenPBS Job Queue ───────────────────────────────────────────────────
+    # 4. OpenPBS Queue status
     pbs_queue_path = BASE / "signals" / "mission" / "pbs_queue.json"
-    data["pbs_queue"] = []
+    pbs_queue = []
     if pbs_queue_path.exists():
         try:
             with open(pbs_queue_path, "r") as f:
-                data["pbs_queue"] = json.load(f)
+                pbs_queue = [OpenPBSJob(**job) for job in json.load(f)]
         except Exception:
             pass
 
-    return jsonify(data)
+    # Assemble response dictionary
+    response_dict = {
+        "cpu": cpu.model_dump(),
+        "memory": memory.model_dump(),
+        "battery": battery.model_dump(),
+        "disk": disk.model_dump(),
+        "temperature": temperature.model_dump(),
+        "processes": [p.model_dump() for p in processes],
+        "users": [u.model_dump() for u in users],
+        "sysinfo": sysinfo.model_dump(),
+        "wildfire_alert": alert_status.model_dump(),
+        "pbs_queue": [j.model_dump() for j in pbs_queue]
+    }
 
-# ── Main ──────────────────────────────────────────────────────────────────────
+    # Validate against Schema before sending
+    try:
+        validated = SystemMetricsResponse.model_validate(response_dict)
+        return jsonify(validated.model_dump())
+    except Exception as e:
+        print(f"[DASHBOARD] Schema validation failure: {e}", file=sys.stderr)
+        return jsonify(response_dict)
 
 if __name__ == "__main__":
     cfg  = load_config()
     host = cfg.get("server", {}).get("host", "127.0.0.1")
-    port = cfg.get("server", {}).get("port", 5000)
-
-    # Warm up CPU percent (first call always returns 0)
-    psutil.cpu_percent(percpu=True)
-    time.sleep(0.2)
+    port = cfg.get("server", {}).get("port", 5005)
 
     print(f"Mac Dashboard running at  http://{host}:{port}")
     print(f"Config:                   {CONFIG_PATH}")
-    print(f"Log:                      {BASE / '.dashboard.log'}")
     print("Press Ctrl-C to stop.\n")
 
     app.run(host=host, port=port, debug=False)
