@@ -22,6 +22,52 @@ for p in [MISSION, LOGS, DATA / "telemetry", OUTPUT_DIR]:
     p.mkdir(parents=True, exist_ok=True)
 
 # --- State Management ---
+LATCH_MSGS = {
+    "BATT_HEATER_ON": ("THERMAL: BATTERY HEATER ACTIVATED", "THERMAL: BATTERY HEATER DEACTIVATED"),
+    "BATT_HEATER_OFF": ("THERMAL: FORCE HEATER OFF ENABLED", "THERMAL: FORCE HEATER OFF DISABLED"),
+    "STABILIZATION": ("AOCS: STABILIZATION CONTROL ACTIVE", "AOCS: STABILIZATION CONTROL INACTIVE"),
+    "THERMAL_LOOP_MONITOR": ("THERMAL: LOOP MONITORING ONLINE", "THERMAL: LOOP MONITORING OFFLINE"),
+    "ORBIT_RAISE_MANEUVER": ("PROPULSION: ORBIT MANEUVER MODE ACTIVE", "PROPULSION: ORBIT MANEUVER MODE INACTIVE"),
+    "DETUMBLE_START": ("AOCS: DETUMBLE MODE ACTIVE", "AOCS: DETUMBLE MODE INACTIVE"),
+    "NADIR_POINTING_ACQUISITION": ("AOCS: NADIR POINTING ACTIVE", "AOCS: NADIR POINTING INACTIVE"),
+    "SOLAR_ARRAY_DEPLOY": ("POWER: SOLAR ARRAYS DEPLOYED", "POWER: SOLAR ARRAYS RETRACTED"),
+    "CRYO_COOLER_START": ("THERMAL: CRYO COOLER ACTIVE", "THERMAL: CRYO COOLER INACTIVE"),
+}
+
+BUTTON_DAT_FILES = {
+    "STAR_TRACKER_CALC": "Star_tracker_attitude_extraction.dat",
+    "BATT_HEATER_OFF": "Battery_heater_off.dat",
+    "BATT_HEATER_ON": "Battery_heater_on.dat",
+    "STABILIZATION": "Stabilization.dat",
+    "THERMAL_LOOP_MONITOR": "Thermal_loop_monitor.dat",
+    "ORBIT_RAISE_MANEUVER": "Orbit_raise_maneuver.dat",
+    "THRUSTER_PURGE": "Thruster_purge.dat",
+    "DETUMBLE_START": "Detumble_start.dat",
+    "NADIR_POINTING_ACQUISITION": "Nadir_pointing_acquisition.dat",
+    "SOLAR_ARRAY_DEPLOY": "Solar_array_deploy.dat",
+    "CRYO_COOLER_START": "Cryo_cooler_start.dat",
+}
+
+def touch_output_file(name):
+    target = OUTPUT_DIR / name
+    try:
+        target.touch()
+        print(f"[SIM] Touched output file: {target}")
+    except Exception as e:
+        print(f"[SIM] Error touching output file {target}: {e}")
+
+def remove_output_file(name):
+    target = OUTPUT_DIR / name
+    if target.exists():
+        try:
+            target.unlink()
+            print(f"[SIM] Removed output file: {target}")
+        except Exception as e:
+            print(f"[SIM] Error removing output file {target}: {e}")
+    if name in STATE["processed_output_files"]:
+        STATE["processed_output_files"].remove(name)
+
+
 STATE: dict[str, Any] = {
     "algo_process": None,
     "onboard_confirmed_wildfires": [],
@@ -29,7 +75,8 @@ STATE: dict[str, Any] = {
     "processed_output_files": set(),
     "false_alert_clear_time": None,
     "completed_display_ticks": 0,
-    "active_alerts": []
+    "active_alerts": [],
+    "latched_states": {k: False for k in LATCH_MSGS}
 }
 
 # --- Orbital Setup ---
@@ -86,6 +133,7 @@ def clean_signals():
     STATE["false_alert_clear_time"] = None
     STATE["completed_display_ticks"] = 0
     STATE["active_alerts"] = []
+    STATE["latched_states"] = {k: False for k in LATCH_MSGS}
     if STATE["algo_process"]:
         try:
             STATE["algo_process"].terminate()
@@ -317,6 +365,25 @@ def run_sim():
                         if (MISSION / "pbs_queue.json").exists():
                             (MISSION / "pbs_queue.json").unlink()
 
+            # 6b. Process latched state files from UI buttons
+            if MISSION.exists():
+                current_files = [f.name for f in list(MISSION.iterdir())]
+                for state_name, (on_msg, off_msg) in LATCH_MSGS.items():
+                    is_active = any(name.startswith(state_name) for name in current_files)
+                    was_active = STATE["latched_states"].get(state_name, False)
+                    dat_file = BUTTON_DAT_FILES.get(state_name)
+                    if is_active and not was_active:
+                        STATE["latched_states"][state_name] = True
+                        if dat_file:
+                            touch_output_file(dat_file)
+                        else:
+                            log_event(on_msg)
+                    elif not is_active and was_active:
+                        STATE["latched_states"][state_name] = False
+                        if dat_file:
+                            remove_output_file(dat_file)
+                        log_event(off_msg)
+
             # 7. Check for incoming commands from UI buttons
             if MISSION.exists():
                 for f in list(MISSION.iterdir()):
@@ -383,6 +450,24 @@ def run_sim():
                         
                     elif fname.startswith("INIT_FALSE"):
                         log_event("DETECTION: FALSE ALARM TELEMETRY DOWNLINKED")
+                        try:
+                            f.unlink()
+                        except Exception:
+                            pass
+                            
+                    elif fname.startswith("STAR_TRACKER_CALC"):
+                        dat_file = BUTTON_DAT_FILES.get("STAR_TRACKER_CALC")
+                        if dat_file:
+                            touch_output_file(dat_file)
+                        try:
+                            f.unlink()
+                        except Exception:
+                            pass
+                            
+                    elif fname.startswith("THRUSTER_PURGE"):
+                        dat_file = BUTTON_DAT_FILES.get("THRUSTER_PURGE")
+                        if dat_file:
+                            touch_output_file(dat_file)
                         try:
                             f.unlink()
                         except Exception:

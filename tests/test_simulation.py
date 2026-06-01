@@ -123,3 +123,91 @@ def test_alert_auto_clear_logic(tmp_path, monkeypatch):
     assert not oil_file.exists()
     assert len(orbios_sim.STATE["active_alerts"]) == 0
 
+
+def test_new_button_signals(tmp_path, monkeypatch):
+    import orbios_sim
+    
+    # Mock paths
+    monkeypatch.setattr(orbios_sim, "MISSION", tmp_path)
+    monkeypatch.setattr(orbios_sim, "OUTPUT_DIR", tmp_path)
+    
+    # Reset latched states
+    orbios_sim.STATE["latched_states"] = {k: False for k in orbios_sim.LATCH_MSGS}
+    
+    # 1. Test instantaneous commands
+    calc_file = tmp_path / "STAR_TRACKER_CALC_20260601_220000"
+    calc_file.touch()
+    purge_file = tmp_path / "THRUSTER_PURGE_20260601_220000"
+    purge_file.touch()
+    
+    # Run the processing logic that unlinks these files
+    if orbios_sim.MISSION.exists():
+        for f in list(orbios_sim.MISSION.iterdir()):
+            fname = f.name
+            if fname.startswith("STAR_TRACKER_CALC"):
+                dat_file = orbios_sim.BUTTON_DAT_FILES.get("STAR_TRACKER_CALC")
+                if dat_file:
+                    orbios_sim.touch_output_file(dat_file)
+                try: f.unlink()
+                except Exception: pass
+            elif fname.startswith("THRUSTER_PURGE"):
+                dat_file = orbios_sim.BUTTON_DAT_FILES.get("THRUSTER_PURGE")
+                if dat_file:
+                    orbios_sim.touch_output_file(dat_file)
+                try: f.unlink()
+                except Exception: pass
+                
+    assert not calc_file.exists()
+    assert not purge_file.exists()
+    assert (tmp_path / "Star_tracker_attitude_extraction.dat").exists()
+    assert (tmp_path / "Thruster_purge.dat").exists()
+    
+    # Clean up output files
+    (tmp_path / "Star_tracker_attitude_extraction.dat").unlink()
+    (tmp_path / "Thruster_purge.dat").unlink()
+    
+    # 2. Test latched states transition
+    # Latch BATT_HEATER_ON
+    heater_file = tmp_path / "BATT_HEATER_ON_20260601_220000"
+    heater_file.touch()
+    
+    # Simulate processing step 6b
+    current_files = [f.name for f in list(orbios_sim.MISSION.iterdir())]
+    for state_name, (on_msg, off_msg) in orbios_sim.LATCH_MSGS.items():
+        is_active = any(name.startswith(state_name) for name in current_files)
+        was_active = orbios_sim.STATE["latched_states"].get(state_name, False)
+        dat_file = orbios_sim.BUTTON_DAT_FILES.get(state_name)
+        if is_active and not was_active:
+            orbios_sim.STATE["latched_states"][state_name] = True
+            if dat_file:
+                orbios_sim.touch_output_file(dat_file)
+        elif not is_active and was_active:
+            orbios_sim.STATE["latched_states"][state_name] = False
+            if dat_file:
+                orbios_sim.remove_output_file(dat_file)
+            
+    assert orbios_sim.STATE["latched_states"]["BATT_HEATER_ON"] is True
+    assert (tmp_path / "Battery_heater_on.dat").exists()
+    
+    # Release BATT_HEATER_ON (delete file)
+    heater_file.unlink()
+    
+    # Re-simulate processing step 6b
+    current_files = [f.name for f in list(orbios_sim.MISSION.iterdir())]
+    for state_name, (on_msg, off_msg) in orbios_sim.LATCH_MSGS.items():
+        is_active = any(name.startswith(state_name) for name in current_files)
+        was_active = orbios_sim.STATE["latched_states"].get(state_name, False)
+        dat_file = orbios_sim.BUTTON_DAT_FILES.get(state_name)
+        if is_active and not was_active:
+            orbios_sim.STATE["latched_states"][state_name] = True
+            if dat_file:
+                orbios_sim.touch_output_file(dat_file)
+        elif not is_active and was_active:
+            orbios_sim.STATE["latched_states"][state_name] = False
+            if dat_file:
+                orbios_sim.remove_output_file(dat_file)
+            
+    assert orbios_sim.STATE["latched_states"]["BATT_HEATER_ON"] is False
+    assert not (tmp_path / "Battery_heater_on.dat").exists()
+
+
