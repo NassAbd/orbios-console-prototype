@@ -2,10 +2,9 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>ORBIOS TACTICAL CONSOLE — POC</title>
+    <title>ORBIOS SIMULATOR & CONTROL PANEL</title>
     <style>
         :root {
-            --rail-h: 66px;
             --panel-w: 380px;
             --bg: #000;
             --border: #1d9e75;
@@ -17,23 +16,15 @@
         }
         .container {
             display: grid;
-            grid-template-rows: var(--rail-h) 1fr;
             grid-template-columns: 1fr var(--panel-w);
             height: 100vh;
             width: 100vw;
         }
-        #window-monitor {
-            grid-row: 1;
-            grid-column: 1 / span 2;
-            border-bottom: 1px solid var(--border);
-        }
         #window-map {
-            grid-row: 2;
             grid-column: 1;
             border-right: 1px solid var(--border);
         }
         #window-panel {
-            grid-row: 2;
             grid-column: 2;
             background: #111;
         }
@@ -46,12 +37,7 @@
 </head>
 <body>
     <div class="container">
-        <!-- TOP RAIL: System Monitor -->
-        <div id="window-monitor">
-            <iframe src="http://localhost:5005"></iframe>
-        </div>
-        
-        <!-- CENTER: Tactical Geospatial -->
+        <!-- LEFT: Tactical Geospatial Map -->
         <div id="window-map">
             <iframe src="tactical_map.html"></iframe>
         </div>

@@ -10,9 +10,17 @@ import json
 import pathlib
 import socketserver
 import sys
+import argparse
+import requests
 
 PORT = 8765
 PANEL_HTML = pathlib.Path(__file__).parent / "panel.html"
+
+# Remote Pi configurations (will be overridden via CLI args)
+PI_REMOTE_ENABLED = False
+PI_IP = "192.168.2.2"
+PI_PORT = 5006
+
 
 
 class Handler(http.server.BaseHTTPRequestHandler):
@@ -47,6 +55,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
     # ── file operations ───────────────────────────────────────────────────────
 
     def _touch(self, body):
+        if PI_REMOTE_ENABLED:
+            try:
+                r = requests.post(f"http://{PI_IP}:{PI_PORT}/api/touch", json=body, timeout=3.0)
+                return self._respond(r.status_code, r.json())
+            except Exception as e:
+                return self._respond(502, {"error": f"Cannot reach Pi server: {e}"})
+
         dir_path = body.get("dir", "")
         name     = body.get("name", "")
         if not dir_path or not name:
@@ -62,6 +77,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._respond(500, {"error": str(e)})
 
     def _listdir(self, body):
+        if PI_REMOTE_ENABLED:
+            try:
+                r = requests.post(f"http://{PI_IP}:{PI_PORT}/api/listdir", json=body, timeout=3.0)
+                return self._respond(r.status_code, r.json())
+            except Exception as e:
+                return self._respond(502, {"error": f"Cannot reach Pi server: {e}"})
+
         dir_path = body.get("dir", "")
         if not dir_path:
             return self._respond(400, {"error": "dir required"})
@@ -77,6 +99,13 @@ class Handler(http.server.BaseHTTPRequestHandler):
             self._respond(500, {"error": str(e)})
 
     def _remove(self, body):
+        if PI_REMOTE_ENABLED:
+            try:
+                r = requests.post(f"http://{PI_IP}:{PI_PORT}/api/remove", json=body, timeout=3.0)
+                return self._respond(r.status_code, r.json())
+            except Exception as e:
+                return self._respond(502, {"error": f"Cannot reach Pi server: {e}"})
+
         dir_path = body.get("dir", "")
         name     = body.get("name", "")
         if not dir_path or not name:
@@ -90,6 +119,7 @@ class Handler(http.server.BaseHTTPRequestHandler):
         except Exception as e:
             print(f"  ERROR  {e}")
             self._respond(500, {"error": str(e)})
+
 
     # ── helpers ───────────────────────────────────────────────────────────────
 
@@ -128,17 +158,47 @@ class Handler(http.server.BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Headers", "Content-Type")
 
 
+def verify_pi_connection(ip: str, port: int):
+    url = f"http://{ip}:{port}/api/metrics"
+    print(f"[PANEL] Validating connection to Raspberry Pi at {url}...")
+    try:
+        r = requests.get(url, timeout=3.0)
+        if r.status_code == 200:
+            print("[PANEL] Successfully connected to Raspberry Pi.")
+            return True
+        else:
+            print(f"[PANEL] ERROR: Pi server returned status code {r.status_code}")
+            sys.exit(1)
+    except Exception as e:
+        print(f"[PANEL] ERROR: Cannot reach Raspberry Pi at {url}: {e}")
+        sys.exit(1)
+
 if __name__ == "__main__":
     if not PANEL_HTML.exists():
         print(f"ERROR: panel.html not found at {PANEL_HTML}")
         sys.exit(1)
 
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--remote", help="IP address of the remote Raspberry Pi")
+    parser.add_argument("--port", type=int, default=8765, help="Port to run panel server locally")
+    args = parser.parse_args()
+
+    PORT = args.port if args.port else 8765
+
+    if args.remote:
+        PI_REMOTE_ENABLED = True
+        PI_IP = args.remote
+        verify_pi_connection(PI_IP, PI_PORT)
+        print(f"OrbiOS Workstation Panel running in REMOTE mode (Pi: {PI_IP}:{PI_PORT}) at http://localhost:{PORT}")
+    else:
+        print(f"OrbiOS Workstation Panel running in LOCAL mode at http://localhost:{PORT}")
+
     socketserver.TCPServer.allow_reuse_address = True
     with socketserver.TCPServer(("", PORT), Handler) as httpd:
-        print("Control Panel server running.")
         print(f"Open in Firefox:  http://localhost:{PORT}")
         print("Press Ctrl+C to stop.\n")
         try:
             httpd.serve_forever()
         except KeyboardInterrupt:
             print("\nServer stopped.")
+

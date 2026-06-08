@@ -6,20 +6,29 @@ dist/
 wheels/
 *.egg-info
 
-# Runtime files
-.dashboard.log
-.dashboard.pid
+# Cache and environment directories
 .DS_Store
+.venv/
+.pytest_cache/
+.ruff_cache/
 
-# Virtual environments
-.venv
+# User todo list
+todo.txt
+**/todo.txt
 
 # ORBIOS V2 Runtime Signals and Telemetry
-signals/mission/*
-signals/logs/*
-data/telemetry/*
+**/signals/mission/*
+**/signals/logs/*
+**/data/telemetry/*
 
 # ORBIOS Process Logs
-.*_v2.log
-.dashboard.log
-.dashboard.pid
+**/.*_v2.log
+**/.dashboard.log
+**/.dashboard_v2.log
+**/.panel_v2.log
+**/.sim_v2.log
+**/.dashboard.pid
+
+# Compiled C binaries
+**/main2
+**/*.o

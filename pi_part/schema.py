@@ -99,3 +99,34 @@ class SystemMetricsResponse(BaseModel):
     sysinfo: SysInfoMetrics
     wildfire_alert: WildfireAlertStatus
     pbs_queue: List[OpenPBSJob]
+
+
+class FileTouchRequest(BaseModel):
+    dir: str
+    name: str
+
+
+class FileRemoveRequest(BaseModel):
+    dir: str
+    name: str
+
+
+class FileListRequest(BaseModel):
+    dir: str
+
+
+class FileTouchResponse(BaseModel):
+    ok: bool
+    path: Optional[str] = None
+    error: Optional[str] = None
+
+
+class FileRemoveResponse(BaseModel):
+    ok: bool
+    error: Optional[str] = None
+
+
+class FileListResponse(BaseModel):
+    files: List[str]
+    error: Optional[str] = None
+

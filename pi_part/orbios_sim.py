@@ -7,6 +7,12 @@ import subprocess
 import re
 from datetime import datetime
 from skyfield.api import load, EarthSatellite
+import platform
+import socket
+import threading
+import psutil
+from flask import Flask, jsonify, request, send_from_directory
+
 
 # --- Paths ---
 PROJECT_ROOT = pathlib.Path(__file__).parent.absolute()
@@ -478,7 +484,297 @@ def run_sim():
             print(f"Sim Error: {e}")
             time.sleep(1)
 
+def collect_pi_metrics() -> dict:
+    # 1. CPU Metrics
+    cpu_overall = psutil.cpu_percent(interval=None)
+    cpu_per_core = psutil.cpu_percent(interval=None, percpu=True)
+    if isinstance(cpu_per_core, float):
+        cpu_per_core = [cpu_per_core]
+    
+    # cpu freq
+    cpu_freq_obj = psutil.cpu_freq()
+    frequency = int(cpu_freq_obj.current) if cpu_freq_obj else 1500
+    freq_max = int(cpu_freq_obj.max) if cpu_freq_obj else 1500
+    
+    # load average
+    try:
+        load_avg = list(psutil.getloadavg())
+    except AttributeError:
+        load_avg = [0.0, 0.0, 0.0]
+        
+    # 2. Memory Metrics
+    vmem = psutil.virtual_memory()
+    memory_pct = vmem.percent
+    used_str = f"{(vmem.used / 1024**3):.1f} GB"
+    total_str = f"{(vmem.total / 1024**3):.1f} GB"
+    
+    # Linux-specific active/inactive/buffers/cached
+    active_str = f"{(vmem.active / 1024**3):.1f} GB" if hasattr(vmem, "active") else None
+    inactive_str = f"{(vmem.inactive / 1024**3):.1f} GB" if hasattr(vmem, "inactive") else None
+    wired_str = f"{(vmem.buffers / 1024**3 + vmem.cached / 1024**3):.1f} GB" if hasattr(vmem, "buffers") else None
+    
+    # swap
+    swap = psutil.swap_memory()
+    swap_pct = swap.percent
+    swap_used_str = f"{(swap.used / 1024**2):.1f} MB"
+    swap_total_str = f"{(swap.total / 1024**3):.1f} GB"
+    
+    # 3. Battery Metrics - adapted for Pi (which is wall powered)
+    battery = {
+        "available": False,
+        "percent": None,
+        "plugged": True,
+        "secs_left": None,
+        "cycle_count": None,
+        "health": None
+    }
+    
+    # 4. Disk Metrics
+    usage = psutil.disk_usage('/')
+    partitions = [{
+        "mount": "/",
+        "percent": usage.percent,
+        "used_str": f"{(usage.used / 1024**3):.1f} GB",
+        "total_str": f"{(usage.total / 1024**3):.1f} GB"
+    }]
+    
+    read_rate = "0.0 B/s"
+    write_rate = "0.0 B/s"
+    
+    # 5. Temperature Metrics
+    temp_val = None
+    try:
+        temp_path = pathlib.Path("/sys/class/thermal/thermal_zone0/temp")
+        if temp_path.exists():
+            temp_val = float(temp_path.read_text().strip()) / 1000.0
+    except Exception:
+        pass
+        
+    if temp_val is None:
+        try:
+            temps = psutil.sensors_temperatures()
+            if temps:
+                for k, v in temps.items():
+                    if v:
+                        temp_val = v[0].current
+                        break
+        except Exception:
+            pass
+    if temp_val is None:
+        temp_val = 45.0
+        
+    # 6. Process listing
+    processes = []
+    for proc in psutil.process_iter(['pid', 'name', 'username', 'cpu_percent', 'memory_percent']):
+        try:
+            info = proc.info
+            processes.append({
+                "pid": info["pid"],
+                "name": info["name"] or "unknown",
+                "user": info["username"] or "unknown",
+                "cpu": info["cpu_percent"] or 0.0,
+                "mem": info["memory_percent"] or 0.0
+            })
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+            pass
+            
+    processes = sorted(processes, key=lambda p: (p["cpu"], p["mem"]), reverse=True)[:10]
+    
+    # 7. Users
+    users = []
+    try:
+        for u in psutil.users():
+            try:
+                since_str = datetime.fromtimestamp(u.started).strftime("%b %d %H:%M")
+            except Exception:
+                since_str = "unknown"
+            users.append({
+                "name": u.name,
+                "terminal": u.terminal or "ssh",
+                "since": since_str
+            })
+    except Exception:
+        pass
+        
+    # 8. Sysinfo (with phase mapping for uptime)
+    n_files = 0
+    if OUTPUT_DIR.exists():
+        n_files = len([f for f in OUTPUT_DIR.iterdir() if f.name.endswith(".dat")])
+    if n_files == 0:
+        phase = "IDLE"
+    elif n_files <= 7:
+        phase = "PRE-PROCESSING"
+    elif n_files <= 13:
+        phase = "AI INFERENCE"
+    elif n_files < 24:
+        phase = "POST-PROCESSING"
+    else:
+        phase = "COMPLETED"
+        
+    try:
+        boot_time_str = datetime.fromtimestamp(psutil.boot_time()).strftime("%d %b %Y %H:%M")
+    except Exception:
+        boot_time_str = "unknown"
+        
+    sysinfo = {
+        "hostname": socket.gethostname(),
+        "os": f"{platform.system()} {platform.release()}",
+        "arch": platform.machine(),
+        "boot_time": boot_time_str,
+        "uptime": phase,
+        "cpu_count": psutil.cpu_count() or 4
+    }
+    
+    return {
+        "cpu": {
+            "overall": cpu_overall,
+            "per_core": cpu_per_core,
+            "frequency": frequency,
+            "freq_max": freq_max,
+            "load_avg": load_avg
+        },
+        "memory": {
+            "percent": memory_pct,
+            "used_str": used_str,
+            "total_str": total_str,
+            "active": active_str,
+            "inactive": inactive_str,
+            "wired": wired_str,
+            "swap_percent": swap_pct,
+            "swap_used_str": swap_used_str,
+            "swap_total_str": swap_total_str
+        },
+        "battery": battery,
+        "disk": {
+            "partitions": partitions,
+            "read_rate": read_rate,
+            "write_rate": write_rate
+        },
+        "temperature": {
+            "value": temp_val
+        },
+        "processes": processes,
+        "users": users,
+        "sysinfo": sysinfo,
+        "wildfire_alert": {"active": False},
+        "pbs_queue": []
+    }
+
+# --- Pi HTTP API Server ---
+pi_app = Flask("orbios_pi_server")
+
+@pi_app.route("/api/metrics")
+def pi_metrics():
+    metrics_dict = collect_pi_metrics()
+    
+    # Check for active mission alerts
+    fire_confirmed_path = MISSION / "FIRE_CONFIRMED.json"
+    oil_leak_path = MISSION / "OIL_LEAK_ACTIVE.json"
+    active_alert = fire_confirmed_path.exists() or oil_leak_path.exists()
+    
+    metrics_dict["wildfire_alert"]["active"] = active_alert
+    
+    if fire_confirmed_path.exists():
+        try:
+            with open(fire_confirmed_path, "r") as f:
+                metrics_dict["wildfire_alert"]["data"] = json.load(f)
+        except Exception:
+            pass
+    elif oil_leak_path.exists():
+        try:
+            with open(oil_leak_path, "r") as f:
+                metrics_dict["wildfire_alert"]["data"] = json.load(f)
+        except Exception:
+            pass
+            
+    # Check PBS queue
+    pbs_queue_path = MISSION / "pbs_queue.json"
+    if pbs_queue_path.exists():
+        try:
+            with open(pbs_queue_path, "r") as f:
+                metrics_dict["pbs_queue"] = json.load(f)
+        except Exception:
+            pass
+            
+    return jsonify(metrics_dict)
+
+@pi_app.route("/api/touch", methods=["POST"])
+def pi_touch():
+    data = request.json or {}
+    dir_name = data.get("dir", "")
+    name = data.get("name", "")
+    if not dir_name or not name:
+        return jsonify({"ok": False, "error": "dir and name required"}), 400
+    try:
+        target = (PROJECT_ROOT / dir_name / name).resolve()
+        if not str(target).startswith(str(PROJECT_ROOT)):
+            return jsonify({"ok": False, "error": "Access denied"}), 403
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.touch()
+        print(f"[PI_API] TOUCH {target}")
+        return jsonify({"ok": True, "path": str(target)})
+    except Exception as e:
+        print(f"[PI_API] TOUCH ERROR: {e}")
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+@pi_app.route("/api/remove", methods=["POST"])
+def pi_remove():
+    data = request.json or {}
+    dir_name = data.get("dir", "")
+    name = data.get("name", "")
+    if not dir_name or not name:
+        return jsonify({"ok": False, "error": "dir and name required"}), 400
+    try:
+        target = (PROJECT_ROOT / dir_name / name).resolve()
+        if not str(target).startswith(str(PROJECT_ROOT)):
+            return jsonify({"ok": False, "error": "Access denied"}), 403
+        if target.exists():
+            target.unlink()
+            print(f"[PI_API] REMOVE {target}")
+        return jsonify({"ok": True})
+    except Exception as e:
+        print(f"[PI_API] REMOVE ERROR: {e}")
+        return jsonify({"ok": False, "error": str(e)}), 500
+
+@pi_app.route("/api/listdir", methods=["POST"])
+def pi_listdir():
+    data = request.json or {}
+    dir_name = data.get("dir", "")
+    if not dir_name:
+        return jsonify({"files": [], "error": "dir required"}), 400
+    try:
+        p = (PROJECT_ROOT / dir_name).resolve()
+        if not str(p).startswith(str(PROJECT_ROOT)):
+            return jsonify({"files": [], "error": "Access denied"}), 403
+        if not p.is_dir():
+            return jsonify({"files": []})
+        sorted_files = sorted([f for f in p.iterdir() if f.is_file()], key=lambda f: f.stat().st_mtime)
+        return jsonify({"files": [f.name for f in sorted_files]})
+    except Exception as e:
+        print(f"[PI_API] LISTDIR ERROR: {e}")
+        return jsonify({"files": [], "error": str(e)}), 500
+
+@pi_app.route("/data/telemetry/sat_01.json")
+def pi_telemetry():
+    return send_from_directory(str(PROJECT_ROOT / "data" / "telemetry"), "sat_01.json")
+
+@pi_app.route("/signals/mission/<filename>")
+def pi_mission_signal(filename):
+    filename = pathlib.Path(filename).name
+    return send_from_directory(str(PROJECT_ROOT / "signals" / "mission"), filename)
+
+def start_pi_api_server():
+    print("[PI_SERVER] Starting API server on port 5006...")
+    import logging
+    log = logging.getLogger('werkzeug')
+    log.setLevel(logging.ERROR)
+    pi_app.run(host="0.0.0.0", port=5006, debug=False, use_reloader=False)
+
 if __name__ == "__main__":
+    # Start the API server thread
+    api_thread = threading.Thread(target=start_pi_api_server, daemon=True)
+    api_thread.start()
+    
     try:
         run_sim()
     except KeyboardInterrupt:
@@ -488,3 +784,4 @@ if __name__ == "__main__":
                 STATE["algo_process"].kill()
             except Exception:
                 pass
+

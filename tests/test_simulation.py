@@ -1,10 +1,11 @@
 import sys
 from pathlib import Path
 
-# Add project root to path so we can import modules
+# Add project root and part folders to path so we can import modules
 PROJECT_ROOT = Path(__file__).parent.parent.absolute()
-if str(PROJECT_ROOT) not in sys.path:
-    sys.path.insert(0, str(PROJECT_ROOT))
+for path in [PROJECT_ROOT, PROJECT_ROOT / "workstation_part", PROJECT_ROOT / "pi_part"]:
+    if str(path) not in sys.path:
+        sys.path.insert(0, str(path))
 
 from orbios_sim import parse_lat_lon_type  # noqa: E402
 from schema import SystemMetricsResponse  # noqa: E402
@@ -46,7 +47,7 @@ def test_dashboard_metrics_schema_idle():
     app = flask.Flask(__name__)
     with app.test_request_context():
         # Clean/mock output dir to show 0 files (IDLE phase)
-        output_dir = PROJECT_ROOT / "algo_part" / "output"
+        output_dir = PROJECT_ROOT / "pi_part" / "algo_part" / "output"
         if output_dir.exists():
             for f in output_dir.iterdir():
                 if f.name.endswith(".dat"):
@@ -148,14 +149,19 @@ def test_new_button_signals(tmp_path, monkeypatch):
                 dat_file = orbios_sim.BUTTON_DAT_FILES.get("STAR_TRACKER_CALC")
                 if dat_file:
                     orbios_sim.touch_output_file(dat_file)
-                try: f.unlink()
-                except Exception: pass
+                try:
+                    f.unlink()
+                except Exception:
+                    pass
             elif fname.startswith("THRUSTER_PURGE"):
                 dat_file = orbios_sim.BUTTON_DAT_FILES.get("THRUSTER_PURGE")
                 if dat_file:
                     orbios_sim.touch_output_file(dat_file)
-                try: f.unlink()
-                except Exception: pass
+                try:
+                    f.unlink()
+                except Exception:
+                    pass
+
                 
     assert not calc_file.exists()
     assert not purge_file.exists()

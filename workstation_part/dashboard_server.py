@@ -9,8 +9,11 @@ Validated against schema.py Pydantic model SystemMetricsResponse.
 import sys
 import json
 import yaml
+import argparse
+import requests
 from pathlib import Path
 from flask import Flask, jsonify, send_from_directory
+
 from schema import (
     SystemMetricsResponse,
     CpuMetrics,
@@ -27,11 +30,17 @@ from schema import (
     OpenPBSJob
 )
 
+# Remote Pi configurations (will be overridden via CLI args)
+PI_REMOTE_ENABLED = False
+PI_IP = "192.168.2.2"
+PI_PORT = 5006
+
 # ── Paths ─────────────────────────────────────────────────────────────────────
 BASE        = Path(__file__).parent
 CONFIG_PATH = BASE / "dashboard_config.yaml"
 HTML_PATH   = BASE / "dashboard.html"
-OUTPUT_DIR  = BASE / "algo_part" / "output"
+OUTPUT_DIR  = BASE.parent / "pi_part" / "algo_part" / "output"
+
 
 app = Flask(__name__, static_folder=str(BASE))
 
@@ -54,6 +63,18 @@ def index():
 
 @app.route("/<path:path>")
 def serve_static(path):
+    if PI_REMOTE_ENABLED and (path.startswith("data/telemetry/") or path.startswith("signals/mission/")):
+        try:
+            url = f"http://{PI_IP}:{PI_PORT}/{path}"
+            r = requests.get(url, timeout=3.0)
+            if r.status_code == 200:
+                if path.endswith(".json"):
+                    return jsonify(r.json())
+                return r.content, 200
+            else:
+                return f"Pi error: {r.status_code}", r.status_code
+        except Exception as e:
+            return f"Proxy error: {e}", 502
     return send_from_directory(str(BASE), path)
 
 @app.route("/config")
@@ -62,8 +83,20 @@ def config_route():
 
 @app.route("/metrics")
 def metrics():
+    if PI_REMOTE_ENABLED:
+        try:
+            url = f"http://{PI_IP}:{PI_PORT}/api/metrics"
+            r = requests.get(url, timeout=3.0)
+            if r.status_code == 200:
+                return jsonify(r.json())
+            else:
+                return jsonify({"error": f"Pi server status {r.status_code}"}), r.status_code
+        except Exception as e:
+            return jsonify({"error": f"Cannot reach Pi server: {e}"}), 502
+
     # 1. Determine C program execution phase based on created output files
     n_files = 0
+
     if OUTPUT_DIR.exists():
         n_files = len([f for f in OUTPUT_DIR.iterdir() if f.name.endswith(".dat")])
     
@@ -171,8 +204,8 @@ def metrics():
     )
 
     # 3. Check for Active Alerts
-    fire_confirmed_path = BASE / "signals" / "mission" / "FIRE_CONFIRMED.json"
-    oil_leak_path = BASE / "signals" / "mission" / "OIL_LEAK_ACTIVE.json"
+    fire_confirmed_path = BASE.parent / "pi_part" / "signals" / "mission" / "FIRE_CONFIRMED.json"
+    oil_leak_path = BASE.parent / "pi_part" / "signals" / "mission" / "OIL_LEAK_ACTIVE.json"
     
     active_alert = fire_confirmed_path.exists() or oil_leak_path.exists()
     alert_status = WildfireAlertStatus(active=active_alert)
@@ -191,7 +224,7 @@ def metrics():
             pass
 
     # 4. OpenPBS Queue status
-    pbs_queue_path = BASE / "signals" / "mission" / "pbs_queue.json"
+    pbs_queue_path = BASE.parent / "pi_part" / "signals" / "mission" / "pbs_queue.json"
     pbs_queue = []
     if pbs_queue_path.exists():
         try:
@@ -199,6 +232,7 @@ def metrics():
                 pbs_queue = [OpenPBSJob(**job) for job in json.load(f)]
         except Exception:
             pass
+
 
     # Assemble response dictionary
     response_dict = {
@@ -222,13 +256,41 @@ def metrics():
         print(f"[DASHBOARD] Schema validation failure: {e}", file=sys.stderr)
         return jsonify(response_dict)
 
+def verify_pi_connection(ip: str, port: int):
+    url = f"http://{ip}:{port}/api/metrics"
+    print(f"[DASHBOARD] Validating connection to Raspberry Pi at {url}...")
+    try:
+        r = requests.get(url, timeout=3.0)
+        if r.status_code == 200:
+            print("[DASHBOARD] Successfully connected to Raspberry Pi.")
+            return True
+        else:
+            print(f"[DASHBOARD] ERROR: Pi server returned status code {r.status_code}")
+            sys.exit(1)
+    except Exception as e:
+        print(f"[DASHBOARD] ERROR: Cannot reach Raspberry Pi at {url}: {e}")
+        sys.exit(1)
+
 if __name__ == "__main__":
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--remote", help="IP address of the remote Raspberry Pi")
+    parser.add_argument("--port", type=int, default=5005, help="Port to run dashboard server locally")
+    args = parser.parse_args()
+
     cfg  = load_config()
     host = cfg.get("server", {}).get("host", "127.0.0.1")
-    port = cfg.get("server", {}).get("port", 5005)
+    port = args.port if args.port else cfg.get("server", {}).get("port", 5005)
 
-    print(f"Mac Dashboard running at  http://{host}:{port}")
+    if args.remote:
+        PI_REMOTE_ENABLED = True
+        PI_IP = args.remote
+        verify_pi_connection(PI_IP, PI_PORT)
+        print(f"OrbiOS Workstation Dashboard running in REMOTE mode (Pi: {PI_IP}:{PI_PORT}) at http://{host}:{port}")
+    else:
+        print(f"OrbiOS Workstation Dashboard running in LOCAL mode at http://{host}:{port}")
+
     print(f"Config:                   {CONFIG_PATH}")
     print("Press Ctrl-C to stop.\n")
 
     app.run(host=host, port=port, debug=False)
+

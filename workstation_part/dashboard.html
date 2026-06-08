@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Mac Dashboard</title>
+<title>Pi Dashboard</title>
 <style>
 /* ── CSS variables (overridden from config via JS) ── */
 :root {
@@ -14,7 +14,7 @@
   --c-bg:    #0d0d10;
   --c-pop:   #17171d;
   --c-text:  rgba(255,255,255,0.82);
-  --c-muted: rgba(255,255,255,0.32);
+  --c-muted: #ffffff;
   --c-dim:   rgba(255,255,255,0.10);
   --rail-h:  66px;
 }
@@ -271,19 +271,103 @@ html, body {
   padding: 0 16px;
   border-radius: 4px;
   animation: blinker 1s linear infinite;
-  margin: 12px 10px;
   box-shadow: 0 0 10px rgba(226,75,74,0.5);
   text-transform: uppercase;
 }
 @keyframes blinker {
   50% { opacity: 0.3; }
 }
+
+/* ── Grid Layout Mode ── */
+.header {
+  display: none;
+  height: 48px;
+  background: rgba(23, 23, 29, 0.9);
+  border-bottom: 0.5px solid var(--c-dim);
+  align-items: center;
+  justify-content: space-between;
+  padding: 0 20px;
+  font-weight: bold;
+  letter-spacing: 0.15em;
+  backdrop-filter: blur(10px);
+  position: sticky;
+  top: 0;
+  z-index: 1000;
+}
+body.layout-grid .header {
+  display: flex;
+}
+.logo {
+  color: var(--c-ok);
+  font-size: 11px;
+}
+.comms-status {
+  color: var(--c-info);
+  font-size: 10px;
+}
+
+#grid-container {
+  display: none;
+  height: calc(100vh - 48px);
+  overflow-y: auto;
+  padding: 20px;
+  box-sizing: border-box;
+}
+body.layout-grid #grid-container {
+  display: block;
+}
+body.layout-grid #rail {
+  display: none;
+}
+body.layout-grid {
+  overflow: auto;
+}
+
+#grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
+  gap: 20px;
+  max-width: 1200px;
+  margin: 0 auto;
+  padding-bottom: 40px;
+}
+
+.card {
+  background: var(--c-pop);
+  border: 0.5px solid rgba(255,255,255,0.12);
+  border-radius: 8px;
+  padding: 16px;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+  transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
+}
+.card:hover {
+  transform: translateY(-2px);
+  border-color: var(--c-ok);
+  box-shadow: 0 4px 16px rgba(0, 255, 65, 0.15);
+}
+
+@media (min-width: 800px) {
+  #card-processes {
+    grid-column: span 2;
+  }
+}
 </style>
 </head>
 <body>
 
+<div class="header">
+  <span class="logo">ORBIOS COCKPIT // RASPBERRY PI OBC MONITOR</span>
+  <span class="comms-status" id="comms-status">CONNECTION: ACTIVE</span>
+</div>
+
 <div id="rail"></div>
+
+<div id="grid-container">
+  <div id="grid"></div>
+</div>
+
 <div id="status-dot"></div>
+
 
 <!-- Popover panels — positioned by JS, content updated on each poll -->
 <div class="popover" id="pop-sysinfo"></div>
@@ -811,6 +895,55 @@ document.addEventListener('click', () => {
   pinned = null;
 });
 
+// ─── Layout & Mode Selection ──────────────────────────────────────────────────
+let layout = 'grid';
+const urlParams = new URLSearchParams(window.location.search);
+if (urlParams.get('layout') === 'rail') {
+  layout = 'rail';
+}
+document.body.classList.add('layout-' + layout);
+
+function buildGrid() {
+  const grid = document.getElementById('grid');
+  if (!grid) return;
+  grid.innerHTML = '';
+
+  const cards = [
+    { id: 'sysinfo', title: 'System Info', contentId: 'pop-sysinfo' },
+    { id: 'cpu', title: 'CPU Status', contentId: 'pop-cpu' },
+    { id: 'memory', title: 'Memory Status', contentId: 'pop-memory' },
+    { id: 'disk', title: 'Disk Storage', contentId: 'pop-disk' },
+    { id: 'temperature', title: 'Temperature', contentId: 'pop-temperature' },
+    { id: 'battery', title: 'Power Source', contentId: 'pop-battery' },
+    { id: 'network', title: 'OpenPBS Queue', contentId: 'pop-network' },
+    { id: 'processes', title: 'Top Processes', contentId: 'pop-processes' },
+    { id: 'users', title: 'Active Sessions', contentId: 'pop-users' }
+  ];
+
+  const isEmergency = METRICS && METRICS.wildfire_alert && METRICS.wildfire_alert.active;
+  if (isEmergency) {
+    const banner = document.createElement('div');
+    banner.className = 'emergency-banner';
+    banner.style.gridColumn = '1 / -1';
+    banner.style.margin = '0';
+    banner.style.height = '40px';
+    banner.innerHTML = '⚡ CRITICAL WARNING ⚡';
+    grid.appendChild(banner);
+    document.body.style.animation = 'emergency-flash 1s infinite ease-in-out';
+  } else {
+    document.body.style.animation = 'none';
+  }
+
+  cards.forEach(c => {
+    const popContent = document.getElementById(c.contentId).innerHTML;
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.id = `card-${c.id}`;
+    card.innerHTML = `<div class="pop-title">${c.title}</div>` + popContent;
+    grid.appendChild(card);
+  });
+}
+
 // ─── Data fetching ────────────────────────────────────────────────────────────
 async function fetchConfig() {
   try {
@@ -837,11 +970,27 @@ async function fetchMetrics() {
 }
 
 async function refresh() {
-  // Re-read config on each cycle (hot-reload support)
   await fetchConfig();
-  await fetchMetrics();
-  buildRail();
+  const ok = await fetchMetrics();
+
+  const statusEl = document.getElementById('comms-status');
+  if (statusEl) {
+    if (ok) {
+      statusEl.textContent = 'CONNECTION: ACTIVE';
+      statusEl.style.color = cssVar('--c-ok');
+    } else {
+      statusEl.textContent = 'CONNECTION: OFFLINE';
+      statusEl.style.color = cssVar('--c-crit');
+    }
+  }
+
+  if (layout === 'rail') {
+    buildRail();
+  }
   updatePopovers();
+  if (layout === 'grid') {
+    buildGrid();
+  }
 }
 
 async function init() {

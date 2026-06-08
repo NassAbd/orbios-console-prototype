@@ -25,38 +25,40 @@ The core goal of this prototype is to demonstrate a mission-critical tactical co
 
 ## 📂 Project Structure
 
-```bash
+```
 orbios_prototype/
-├── index.html                  # Main Cockpit Wrapper (tiles the 3 sub-windows via iframes)
-├── run.command                 # Unified launcher script (pre-compiles C code, runs servers, launches UI)
-├── orbios_sim.py               # Satellite Simulator (tracks active alert timers, unlinks expired alerts)
+├── workstation_part/           # Ground station/workstation UI & servers
+│   ├── dashboard_server.py     # Telemetry HTTP API & static file hosting
+│   ├── panel_server.py         # HTTP Control Panel server
+│   ├── index.html              # Unified Dashboard Cockpit interface
+│   ├── simulator.html          # Map-only simulation viewer (remote mode)
+│   ├── tactical_map.html       # Leaflet maps and footprint viewer
+│   ├── dashboard.html          # System Monitor top rail UI
+│   ├── panel.html              # LCD Control Panel UI
+│   ├── panel_config.json       # Control button definitions
+│   ├── dashboard_config.yaml   # Temperature and telemetry limits
+│   ├── schema.py               # Pydantic validation schemas
+│   └── run.command             # Station unified runner script
 │
-├── dashboard_server.py         # Flask telemetry backend (serves localhost:5005 & CORS file gateway)
-├── dashboard_config.yaml       # Telemetry thresholds and component settings
-├── dashboard.html              # System Monitor Top Rail UI (flashes emergency-red with critical warnings)
+├── pi_part/                    # Simulation & execution on the Raspberry Pi
+│   ├── orbios_sim.py           # Simulation telemetry & signal-clearing daemon
+│   ├── run_pi.command          # Pi daemon startup script
+│   ├── schema.py               # Shared data schemas
+│   ├── algo_part/              # Edge detection C code
+│   │   ├── main2.c
+│   │   ├── payload.c & payload.h
+│   │   ├── input.csv
+│   │   └── output/             # Output folder for detected alerts (.dat)
+│   ├── signals/                # Inter-process coordination folder
+│   └── data/                   # Generated telemetry storage
 │
-├── panel_server.py             # HTTP Control Panel server (handles localhost:8765 filesystem api)
-├── panel_config.json           # Interactive Button and register mapping definitions
-├── panel.html                  # Control Panel frontend (simulates physical LCD + buttons)
+├── tests/                      # Pytest automation suite
+│   ├── test_simulation.py
+│   └── test_remote.py
 │
-├── tactical_map.html           # Geospatial Leaflet map (renders satellite footprint and transient popups)
-│
-├── signals/                    # THE FILE-BUS (Inter-process nervous system)
-│   ├── mission/                # Active signals (e.g. START_AI, RESET, FIRE_CONFIRMED.json)
-│   └── logs/                   # Dynamic operational log files read by the Panel LCD Screen
-│
-├── data/
-│   └── telemetry/              # Live computed orbital coordinates (sat_01.json)
-│
-├── algo_part/                  # C-PIPELINE ALGORITHM
-│   ├── call1/                  # Pre-processing and post-processing mock .dat files
-│   ├── input.csv               # Raw sensor data read by the C program
-│   ├── main2.c                 # C entrypoint simulating satellite OS pre/post-processing files
-│   ├── payload.c & payload.h   # C edge inference risk-scoring logic
-│   └── output/                 # Folder where C program writes detected hazard .dat files
-│
-└── tests/
-    └── test_simulation.py      # Automated Pytest suite checking coordinates and 3s expiration logic
+├── pyproject.toml              # Workstation project configuration
+├── uv.lock                     # Lockfile
+└── README.md
 ```
 
 ---
@@ -69,17 +71,36 @@ Ensure you have the Python virtual environment manager `uv` installed. If missin
 curl -sSf https://get.uv.dev | sh
 ```
 
-### 2. Boot the Console & Open the UI
-From the project root directory, run the unified executable command:
+### 2. Operational Modes
+
+#### Option A: Running Locally (All-in-One Mock Mode)
+To run both the ground station console and the simulation loop on your local machine:
 ```bash
+cd workstation_part/
 ./run.command
 ```
 This script will:
-* Terminate any lingering port bindings on ports 5005 and 8765.
-* Purge stale filesystem cues in `signals/`.
-* Pre-compile the C algorithm source code into `algo_part/main2` using `gcc`.
-* Boot the telemetry server (`localhost:5005`), panel server (`localhost:8765`), and simulator daemon under local isolated environment wrappers (`uv run`).
+* Boot the telemetry server (`localhost:5005`), panel server (`localhost:8765`), and simulator daemon under local environment wrappers (`uv run`).
+* Serve all HTML templates via HTTP to prevent cross-origin (`CORS`) file access restrictions.
 * **Automatically open the dashboard UI (`index.html`) in your default web browser.**
+
+#### Option B: Distributed Remote Mode (Raspberry Pi + Workstation)
+To run the simulation and C algorithm on the Raspberry Pi, and stream metrics/control commands from the ground station workstation:
+
+1. **On the Raspberry Pi (`192.168.2.2`):**
+   Copy the `pi_part/` folder to the Pi, then start the daemon:
+   ```bash
+   cd pi_part/
+   ./run_pi.command
+   ```
+
+2. **On the Workstation (Debian VNC Session):**
+   Run the workstation console specifying the Pi's IP address:
+   ```bash
+   cd workstation_part/
+   ./run.command --remote 192.168.2.2
+   ```
+   * This opens the standalone cockpit Console and the Simulator map, automatically proxying requests to the Pi daemon.
 
 ---
 
@@ -101,5 +122,5 @@ This script will:
 
 ## 🛑 How to Stop
 To shut down all running servers gracefully:
-* Go to the terminal window where `./run.command` is active and press **`Ctrl + C`**. All background Python daemons will be killed automatically.
+* Go to the terminal window where the runner is active and press **`Ctrl + C`**. All background Python daemons will be killed automatically.
 
