@@ -11,20 +11,15 @@ import json
 import yaml
 import argparse
 import requests
+import psutil
+import socket
+import platform
+from datetime import datetime
 from pathlib import Path
 from flask import Flask, jsonify, send_from_directory
 
 from schema import (
     SystemMetricsResponse,
-    CpuMetrics,
-    MemoryMetrics,
-    BatteryMetrics,
-    DiskMetrics,
-    DiskPartition,
-    TemperatureMetrics,
-    ProcessInfo,
-    UserInfo,
-    SysInfoMetrics,
     WildfireAlertStatus,
     MissionAlert,
     OpenPBSJob
@@ -81,6 +76,171 @@ def serve_static(path):
 def config_route():
     return jsonify(load_config())
 
+def collect_local_metrics(phase: str) -> dict:
+    # 1. CPU Metrics
+    cpu_overall = psutil.cpu_percent(interval=None)
+    cpu_per_core = psutil.cpu_percent(interval=None, percpu=True)
+    if isinstance(cpu_per_core, float):
+        cpu_per_core = [cpu_per_core]
+    
+    cpu_freq_obj = psutil.cpu_freq()
+    frequency = int(cpu_freq_obj.current) if cpu_freq_obj else 1500
+    freq_max = int(cpu_freq_obj.max) if cpu_freq_obj else 1500
+    
+    try:
+        load_avg = list(psutil.getloadavg())
+    except AttributeError:
+        load_avg = [0.0, 0.0, 0.0]
+        
+    # 2. Memory Metrics
+    vmem = psutil.virtual_memory()
+    memory_pct = vmem.percent
+    used_str = f"{(vmem.used / 1024**3):.1f} GB"
+    total_str = f"{(vmem.total / 1024**3):.1f} GB"
+    
+    active_str = f"{(vmem.active / 1024**3):.1f} GB" if hasattr(vmem, "active") else None
+    inactive_str = f"{(vmem.inactive / 1024**3):.1f} GB" if hasattr(vmem, "inactive") else None
+    wired_str = f"{(vmem.buffers / 1024**3 + vmem.cached / 1024**3):.1f} GB" if hasattr(vmem, "buffers") else None
+    
+    swap = psutil.swap_memory()
+    swap_pct = swap.percent
+    swap_used_str = f"{(swap.used / 1024**2):.1f} MB"
+    swap_total_str = f"{(swap.total / 1024**3):.1f} GB"
+    
+    # 3. Battery Metrics
+    battery = {
+        "available": False,
+        "percent": None,
+        "plugged": True,
+        "secs_left": None,
+        "cycle_count": None,
+        "health": None
+    }
+    try:
+        batt = psutil.sensors_battery()
+        if batt:
+            battery["available"] = True
+            battery["percent"] = batt.percent
+            battery["plugged"] = batt.power_plugged
+            battery["secs_left"] = batt.secsleft if batt.secsleft != psutil.POWER_TIME_UNLIMITED else None
+    except Exception:
+        pass
+    
+    # 4. Disk Metrics
+    usage = psutil.disk_usage('/')
+    partitions = [{
+        "mount": "/",
+        "percent": usage.percent,
+        "used_str": f"{(usage.used / 1024**3):.1f} GB",
+        "total_str": f"{(usage.total / 1024**3):.1f} GB"
+    }]
+    
+    read_rate = "0.0 B/s"
+    write_rate = "0.0 B/s"
+    
+    # 5. Temperature Metrics
+    temp_val = None
+    try:
+        temp_path = Path("/sys/class/thermal/thermal_zone0/temp")
+        if temp_path.exists():
+            temp_val = float(temp_path.read_text().strip()) / 1000.0
+    except Exception:
+        pass
+        
+    if temp_val is None:
+        try:
+            temps = psutil.sensors_temperatures()
+            if temps:
+                for k, v in temps.items():
+                    if v:
+                        temp_val = v[0].current
+                        break
+        except Exception:
+            pass
+    if temp_val is None:
+        temp_val = 45.0
+        
+    # 6. Process listing
+    processes = []
+    for proc in psutil.process_iter(['pid', 'name', 'username', 'cpu_percent', 'memory_percent']):
+        try:
+            info = proc.info
+            processes.append({
+                "pid": info["pid"],
+                "name": info["name"] or "unknown",
+                "user": info["username"] or "unknown",
+                "cpu": info["cpu_percent"] or 0.0,
+                "mem": info["memory_percent"] or 0.0
+            })
+        except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+            pass
+            
+    processes = sorted(processes, key=lambda p: (p["cpu"], p["mem"]), reverse=True)[:10]
+    
+    # 7. Users
+    users = []
+    try:
+        for u in psutil.users():
+            try:
+                since_str = datetime.fromtimestamp(u.started).strftime("%b %d %H:%M")
+            except Exception:
+                since_str = "unknown"
+            users.append({
+                "name": u.name,
+                "terminal": u.terminal or "ssh",
+                "since": since_str
+            })
+    except Exception:
+        pass
+        
+    try:
+        boot_time_str = datetime.fromtimestamp(psutil.boot_time()).strftime("%d %b %Y %H:%M")
+    except Exception:
+        boot_time_str = "unknown"
+        
+    sysinfo = {
+        "hostname": socket.gethostname(),
+        "os": f"{platform.system()} {platform.release()}",
+        "arch": platform.machine(),
+        "boot_time": boot_time_str,
+        "uptime": phase,
+        "cpu_count": psutil.cpu_count() or 4
+    }
+    
+    return {
+        "cpu": {
+            "overall": cpu_overall,
+            "per_core": cpu_per_core,
+            "frequency": frequency,
+            "freq_max": freq_max,
+            "load_avg": load_avg
+        },
+        "memory": {
+            "percent": memory_pct,
+            "used_str": used_str,
+            "total_str": total_str,
+            "active": active_str,
+            "inactive": inactive_str,
+            "wired": wired_str,
+            "swap_percent": swap_pct,
+            "swap_used_str": swap_used_str,
+            "swap_total_str": swap_total_str
+        },
+        "battery": battery,
+        "disk": {
+            "partitions": partitions,
+            "read_rate": read_rate,
+            "write_rate": write_rate
+        },
+        "temperature": {
+            "value": temp_val
+        },
+        "processes": processes,
+        "users": users,
+        "sysinfo": sysinfo
+    }
+
+
 @app.route("/metrics")
 def metrics():
     if PI_REMOTE_ENABLED:
@@ -117,91 +277,8 @@ def metrics():
     else:
         phase = "COMPLETED"
 
-    # 2. Build mock telemetry/metrics representing the Satellite OBC
-    # CPU Metrics
-    if phase == "IDLE":
-        cpu = CpuMetrics(overall=4.2, per_core=[3.1, 5.0, 2.8, 5.9], frequency=1200, freq_max=3200, load_avg=[0.05, 0.08, 0.12])
-    elif phase == "PRE-PROCESSING":
-        cpu = CpuMetrics(overall=38.5, per_core=[35.2, 42.1, 37.8, 39.0], frequency=2400, freq_max=3200, load_avg=[0.45, 0.38, 0.28])
-    elif phase == "AI INFERENCE":
-        cpu = CpuMetrics(overall=95.8, per_core=[96.5, 94.2, 98.1, 94.4], frequency=3200, freq_max=3200, load_avg=[2.85, 1.95, 1.25])
-    elif phase == "POST-PROCESSING":
-        cpu = CpuMetrics(overall=48.2, per_core=[46.1, 52.3, 44.8, 49.5], frequency=2400, freq_max=3200, load_avg=[0.65, 0.58, 0.48])
-    else: # COMPLETED
-        cpu = CpuMetrics(overall=4.5, per_core=[3.8, 5.1, 3.4, 5.5], frequency=1200, freq_max=3200, load_avg=[0.08, 0.12, 0.18])
-
-    # Memory Metrics
-    if phase == "IDLE":
-        memory = MemoryMetrics(percent=24.5, used_str="3.9 GB", total_str="16.0 GB", active="1.2 GB", inactive="2.0 GB", wired="0.7 GB", swap_percent=5.0, swap_used_str="204.8 MB", swap_total_str="4.0 GB")
-    elif phase == "PRE-PROCESSING":
-        memory = MemoryMetrics(percent=45.2, used_str="7.2 GB", total_str="16.0 GB", active="3.5 GB", inactive="2.5 GB", wired="1.2 GB", swap_percent=8.5, swap_used_str="348.2 MB", swap_total_str="4.0 GB")
-    elif phase == "AI INFERENCE":
-        memory = MemoryMetrics(percent=82.7, used_str="13.2 GB", total_str="16.0 GB", active="8.5 GB", inactive="3.1 GB", wired="1.6 GB", swap_percent=42.1, swap_used_str="1.7 GB", swap_total_str="4.0 GB")
-    elif phase == "POST-PROCESSING":
-        memory = MemoryMetrics(percent=54.8, used_str="8.8 GB", total_str="16.0 GB", active="5.1 GB", inactive="2.3 GB", wired="1.4 GB", swap_percent=12.5, swap_used_str="512.0 MB", swap_total_str="4.0 GB")
-    else: # COMPLETED
-        memory = MemoryMetrics(percent=25.1, used_str="4.0 GB", total_str="16.0 GB", active="1.3 GB", inactive="2.0 GB", wired="0.7 GB", swap_percent=5.2, swap_used_str="213.0 MB", swap_total_str="4.0 GB")
-
-    # Battery (Satellite solar/onboard power reserve)
-    if phase == "IDLE":
-        battery = BatteryMetrics(available=True, percent=98.0, plugged=True, secs_left=None, cycle_count="342", health="Normal")
-    elif phase == "PRE-PROCESSING":
-        battery = BatteryMetrics(available=True, percent=85.0, plugged=False, secs_left=3600, cycle_count="342", health="Normal")
-    elif phase == "AI INFERENCE":
-        battery = BatteryMetrics(available=True, percent=68.0, plugged=False, secs_left=1200, cycle_count="342", health="Normal")
-    elif phase == "POST-PROCESSING":
-        battery = BatteryMetrics(available=True, percent=52.0, plugged=False, secs_left=2400, cycle_count="342", health="Normal")
-    else: # COMPLETED
-        battery = BatteryMetrics(available=True, percent=48.0, plugged=True, secs_left=None, cycle_count="342", health="Normal")
-
-    # Disk partition (OBC raw storage)
-    read_rate = "0.0 B/s" if phase in ("IDLE", "COMPLETED") else "12.4 MB/s"
-    write_rate = "0.0 B/s" if phase in ("IDLE", "COMPLETED") else "18.2 MB/s"
-    disk = DiskMetrics(
-        partitions=[DiskPartition(mount="/", percent=14.5, used_str="18.2 GB", total_str="128.0 GB")],
-        read_rate=read_rate,
-        write_rate=write_rate
-    )
-
-    # Temperature (OBC sensor core temp)
-    if phase == "IDLE":
-        temp_val = 38.5
-    elif phase == "PRE-PROCESSING":
-        temp_val = 52.4
-    elif phase == "AI INFERENCE":
-        temp_val = 84.8
-    elif phase == "POST-PROCESSING":
-        temp_val = 61.2
-    else: # COMPLETED
-        temp_val = 42.1
-    temperature = TemperatureMetrics(value=temp_val)
-
-    # Mock satellite OS processes listing
-    processes = []
-    if phase != "IDLE":
-        processes.append(ProcessInfo(pid=1024, name="main2", user="root", cpu=95.0 if phase == "AI INFERENCE" else 40.0, mem=22.4 if phase == "AI INFERENCE" else 5.2))
-        processes.append(ProcessInfo(pid=1025, name="aocs_control", user="root", cpu=22.0 if phase == "POST-PROCESSING" else 2.5, mem=4.2))
-        processes.append(ProcessInfo(pid=1026, name="thermal_mgmt", user="root", cpu=8.5 if phase == "AI INFERENCE" else 1.2, mem=1.1))
-        processes.append(ProcessInfo(pid=1027, name="telemetry_tx", user="root", cpu=12.0 if phase == "PRE-PROCESSING" else 1.0, mem=2.3))
-    processes.append(ProcessInfo(pid=1, name="obc_kernel", user="root", cpu=2.1, mem=1.2))
-    processes.append(ProcessInfo(pid=22, name="payload_mgr", user="root", cpu=4.8, mem=3.5))
-
-    # Logged-in Users
-    users = [
-        UserInfo(name="root", terminal="console", since="May 28 08:00"),
-        UserInfo(name="ai_agent", terminal="ssh", since="May 28 14:30")
-    ]
-
-    # Uptime & SysInfo metrics
-    # Hostname: OBC system ID, Uptime: OBC pipeline active phase string
-    sysinfo = SysInfoMetrics(
-        hostname="ORBIOS-OBC-S1",
-        os="Ubuntu Linux 24.04 (RT-Kernel)",
-        arch="aarch64",
-        boot_time="28 May 2026 08:00",
-        uptime=phase,
-        cpu_count=4
-    )
+    # 2. Collect real telemetry/metrics of local workstation
+    local_metrics = collect_local_metrics(phase)
 
     # 3. Check for Active Alerts
     fire_confirmed_path = BASE.parent / "pi_part" / "signals" / "mission" / "FIRE_CONFIRMED.json"
@@ -233,17 +310,16 @@ def metrics():
         except Exception:
             pass
 
-
     # Assemble response dictionary
     response_dict = {
-        "cpu": cpu.model_dump(),
-        "memory": memory.model_dump(),
-        "battery": battery.model_dump(),
-        "disk": disk.model_dump(),
-        "temperature": temperature.model_dump(),
-        "processes": [p.model_dump() for p in processes],
-        "users": [u.model_dump() for u in users],
-        "sysinfo": sysinfo.model_dump(),
+        "cpu": local_metrics["cpu"],
+        "memory": local_metrics["memory"],
+        "battery": local_metrics["battery"],
+        "disk": local_metrics["disk"],
+        "temperature": local_metrics["temperature"],
+        "processes": local_metrics["processes"],
+        "users": local_metrics["users"],
+        "sysinfo": local_metrics["sysinfo"],
         "wildfire_alert": alert_status.model_dump(),
         "pbs_queue": [j.model_dump() for j in pbs_queue]
     }

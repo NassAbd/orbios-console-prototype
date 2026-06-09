@@ -63,10 +63,11 @@ def test_dashboard_metrics_schema_idle():
         # Verify schema validation succeeds
         validated = SystemMetricsResponse.model_validate(data)
         assert validated.sysinfo.uptime == "IDLE"
-        assert validated.cpu.overall == 4.2
-        assert validated.temperature.value == 38.5
-        assert validated.battery.percent == 98.0
-        assert validated.battery.plugged is True
+        assert 0 <= validated.cpu.overall <= 100
+        assert validated.temperature.value is None or validated.temperature.value > 0
+        if validated.battery.available:
+            assert 0 <= validated.battery.percent <= 100
+            assert isinstance(validated.battery.plugged, bool)
 
 
 def test_update_telemetry_static():

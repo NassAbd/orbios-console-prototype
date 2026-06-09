@@ -6,9 +6,20 @@
     <style>
         body, html, #map { height: 100%; margin: 0; background: #000; overflow: hidden; }
         #map { 
-            filter: invert(100%) hue-rotate(90deg) brightness(0.4) contrast(1.4); 
+            /* Invert filter removed to keep map colorful */
         }
         .leaflet-container { background: #000 !important; }
+
+        /* Animated downlink beam style */
+        @keyframes dash {
+            to {
+                stroke-dashoffset: -20;
+            }
+        }
+        .downlink-polyline {
+            stroke-dasharray: 6, 6;
+            animation: dash 1.5s linear infinite;
+        }
         .overlay-label {
             position: absolute; top: 10px; left: 10px; z-index: 1000;
             color: #00ff41; font-family: monospace; font-size: 10px;
@@ -97,7 +108,7 @@
             center: [40.2, -7.8], zoom: 6, 
             zoomControl: false, attributionControl: false 
         });
-        L.tileLayer('https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png').addTo(map);
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
         let satMarker = null;
         let satCircle = null; // Satellite coverage footprint radius
@@ -140,18 +151,71 @@
             }
         }
 
+        let downlinkLine = null;
+        let targetArrow = null;
+
+        function updateDownlinkArrow(startLatLng, endLatLng, color, isDashed) {
+            if (downlinkLine) {
+                downlinkLine.remove();
+            }
+            if (targetArrow) {
+                targetArrow.remove();
+            }
+            
+            downlinkLine = L.polyline([startLatLng, endLatLng], {
+                color: color,
+                weight: 3,
+                opacity: 0.85,
+                className: isDashed ? 'downlink-polyline' : ''
+            }).addTo(map);
+            
+            // Calculate angle for arrowhead pointing to target
+            const dy = endLatLng[0] - startLatLng[0];
+            const dx = endLatLng[1] - startLatLng[1];
+            let angle = Math.atan2(dy, dx) * 180 / Math.PI;
+            
+            const arrowIcon = L.divIcon({
+                html: `<div style="transform: rotate(${angle + 90}deg); color: ${color}; font-size: 16px; font-weight: bold; text-shadow: 0 0 5px ${color}; text-align: center;">▲</div>`,
+                className: 'arrowhead-marker',
+                iconSize: [20, 20],
+                iconAnchor: [10, 10]
+            });
+            
+            targetArrow = L.marker(endLatLng, { icon: arrowIcon }).addTo(map);
+        }
+
+        function clearDownlinkArrow() {
+            if (downlinkLine) {
+                downlinkLine.remove();
+                downlinkLine = null;
+            }
+            if (targetArrow) {
+                targetArrow.remove();
+                targetArrow = null;
+            }
+        }
+
         async function pollMission() {
             try {
                 const files = [
-                    { name: 'HEAT_SPIKE_ACTIVE.json', type: 'unconfirmed' },
-                    { name: 'FIRE_CONFIRMED.json', type: 'confirmed' },
-                    { name: 'OIL_LEAK_ACTIVE.json', type: 'oilleak' }
+                    { name: 'FIRE_CONFIRMED.json', color: '#e24b4a', type: 'confirmed' },
+                    { name: 'OIL_LEAK_ACTIVE.json', color: '#6ab0e8', type: 'oilleak' },
+                    { name: 'HEAT_SPIKE_ACTIVE.json', color: '#ffaa33', type: 'unconfirmed' }
                 ];
+                
+                let activeTarget = null;
+                let activeColor = '#00ff41';
+                let isDashed = true;
+                let activeAlertFound = false;
                 
                 for (const item of files) {
                     const r = await fetch('http://localhost:5005/signals/mission/' + item.name + '?t=' + Date.now());
                     if (r.ok) {
                         const data = await r.json();
+                        activeAlertFound = true;
+                        activeTarget = [data.lat, data.lon];
+                        activeColor = item.color;
+                        isDashed = false;
                         
                         if (!missionMarkers[item.name]) {
                             // Formulate detailed tactical telemetry popups
@@ -208,6 +272,28 @@
                             delete missionMarkers[item.name];
                         }
                     }
+                }
+                
+                // If no active hazard alert is displayed, check if C inference is running via pbs_queue.json
+                if (!activeAlertFound) {
+                    const r = await fetch('http://localhost:5005/signals/mission/pbs_queue.json?t=' + Date.now());
+                    if (r.ok) {
+                        const jobs = await r.json();
+                        const job = jobs[0];
+                        if (job && (job.status === 'RUNNING' || job.status === 'QUEUED')) {
+                            // Show target beam to Spain/Portugal focus center
+                            activeTarget = [40.2, -7.8];
+                            activeColor = '#ffaa33';
+                            isDashed = true;
+                        }
+                    }
+                }
+                
+                // Draw or clear downlink arrow connection
+                if (activeTarget && satMarker) {
+                    updateDownlinkArrow(satMarker.getLatLng(), activeTarget, activeColor, isDashed);
+                } else {
+                    clearDownlinkArrow();
                 }
             } catch(e) {
                 console.error("Mission polling error:", e);

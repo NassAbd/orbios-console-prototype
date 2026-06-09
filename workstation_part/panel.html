@@ -69,7 +69,8 @@ body {
   font-size: 11px;
   line-height: 1.25;
   color: #7fff82;
-  white-space: pre;
+  white-space: pre-wrap;
+  word-break: break-word;
   overflow: hidden;
   display: block;
   width: 50ch;
@@ -321,10 +322,37 @@ function displayAppend(line) {
 function renderDisplay() {
   const el = document.getElementById('display-screen');
   if (!el) return;
-  // Show last ROWS lines, each padded to COLS
+  el.innerHTML = '';
+  
   const visible = displayLines.slice(-ROWS);
   while (visible.length < ROWS) visible.unshift('');
-  el.textContent = visible.map(l => l.padEnd(COLS, ' ')).join('\n');
+  
+  visible.forEach(line => {
+    const lineEl = document.createElement('div');
+    lineEl.style.whiteSpace = 'pre-wrap';
+    lineEl.style.wordBreak = 'break-word';
+    lineEl.style.minHeight = '1.25em';
+    lineEl.textContent = line;
+    
+    // Distinguish alert/warning logs from internal system logs
+    if (line.includes('ALERT') || line.includes('WILDFIRE') || line.includes('OIL LEAK') || line.includes('WARNING') || line.includes('CRITICAL') || line.includes('ERROR')) {
+      lineEl.style.color = '#ffaa33'; // Amber alert
+      if (line.trim() !== '') {
+        if (/^\d{2}:\d{2}:\d{2}/.test(line)) {
+          lineEl.textContent = line.substring(0, 10) + '⚠️ ' + line.substring(10);
+        } else {
+          lineEl.textContent = '⚠️ ' + line;
+        }
+      }
+    } else if (line.includes('ACTIVATED') || line.includes('ACTIVE') || line.includes('ONLINE') || line.includes('ESTABLISHED')) {
+      lineEl.style.color = '#88bbff'; // Blue active state
+    } else if (line.trim() === '') {
+      lineEl.textContent = ' ';
+    } else {
+      lineEl.style.color = '#7fff82'; // Default green internal signal
+    }
+    el.appendChild(lineEl);
+  });
 }
 
 function clearDisplay() {
