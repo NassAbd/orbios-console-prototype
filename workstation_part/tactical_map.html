@@ -46,13 +46,56 @@
 
         /* Custom Satellite Marker Icon Styling */
         .sat-marker-element {
-            color: #00ff41;
+            color: #e24b4a;
             font-size: 22px;
             font-weight: bold;
             text-align: center;
-            text-shadow: 0 0 8px rgba(0,255,65,0.8);
+            text-shadow: 0 0 8px rgba(226,75,74,0.8);
             transform: rotate(45deg);
         }
+
+        /* HUD Map Legend Key */
+        .map-legend {
+            position: absolute; bottom: 20px; right: 10px; z-index: 1000;
+            color: #fff; font-family: monospace; font-size: 9px;
+            background: rgba(0,0,0,0.85); padding: 10px 14px; border: 1.5px solid #00ff41;
+            border-radius: 4px;
+            box-shadow: 0 0 10px rgba(0,255,65,0.2);
+            line-height: 1.6;
+            min-width: 200px;
+        }
+        .legend-title {
+            color: #00ff41;
+            font-weight: bold;
+            font-size: 10px;
+            margin-bottom: 6px;
+            text-transform: uppercase;
+            border-bottom: 0.5px solid rgba(0,255,65,0.3);
+            padding-bottom: 3px;
+            letter-spacing: 1px;
+        }
+        .legend-item {
+            display: flex;
+            align-items: center;
+            margin: 4px 0;
+        }
+        .legend-icon {
+            width: 14px;
+            height: 14px;
+            margin-right: 8px;
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: bold;
+            flex-shrink: 0;
+            border-radius: 2px;
+        }
+        .legend-circle-swir { border: 1.5px solid #ffaa33; background: rgba(255,170,51,0.2); }
+        .legend-circle-vnir { border: 1.5px solid #00ff41; background: rgba(0,255,65,0.1); }
+        .legend-circle-thermal { border: 1.5px solid #e24b4a; background: rgba(226,75,74,0.05); }
+        .legend-line-targeting { height: 2px; background: repeating-linear-gradient(90deg, #ffaa33, #ffaa33 4px, transparent 4px, transparent 8px); width: 14px; }
+        .legend-line-confirmed { height: 2px; background: #e24b4a; width: 14px; }
+        .legend-line-oilleak { height: 2px; background: #6ab0e8; width: 14px; }
 
         /* Unconfirmed Anomaly Animation (Amber Pulsing) */
         @keyframes amber-pulse {
@@ -101,17 +144,52 @@
 </head>
 <body>
     <div class="overlay-label">TACTICAL GEOSPATIAL VIEW // SAT-TRACKING ACTIVE</div>
+    
+    <div class="map-legend">
+        <div class="legend-title">Tactical Map Key</div>
+        <div class="legend-item">
+            <span class="legend-icon" style="color:#e24b4a; font-size:12px;">▲</span>
+            <span>Satellite (ORBIOS-S1)</span>
+        </div>
+        <div class="legend-item">
+            <span class="legend-icon legend-circle-swir"></span>
+            <span>SWIR Sensor (10km footprint)</span>
+        </div>
+        <div class="legend-item">
+            <span class="legend-icon legend-circle-vnir"></span>
+            <span>VNIR Sensor (20km footprint)</span>
+        </div>
+        <div class="legend-item">
+            <span class="legend-icon legend-circle-thermal"></span>
+            <span>Thermal Sensor (40km footprint)</span>
+        </div>
+        <div class="legend-item">
+            <span class="legend-icon legend-line-targeting"></span>
+            <span>Targeting Beam (AI Processing)</span>
+        </div>
+        <div class="legend-item">
+            <span class="legend-icon legend-line-confirmed"></span>
+            <span>Wildfire Alert Downlink</span>
+        </div>
+        <div class="legend-item">
+            <span class="legend-icon legend-line-oilleak"></span>
+            <span>Oil Leak Alert Downlink</span>
+        </div>
+    </div>
+
     <div id="map"></div>
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
         const map = L.map('map', { 
-            center: [40.2, -7.8], zoom: 6, 
+            center: [40.2, -7.8], zoom: 10, 
             zoomControl: false, attributionControl: false 
         });
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
 
         let satMarker = null;
-        let satCircle = null; // Satellite coverage footprint radius
+        let swirCircle = null;
+        let vnirCircle = null;
+        let thermalCircle = null;
         let missionMarkers = {};
 
         // Custom Satellite Icon (using divIcon for glow filter compatibility)
@@ -129,21 +207,40 @@
                     const data = await r.json();
                     
                     if (!satMarker) {
-                        // Create satellite marker and footprint circle
+                        // Create satellite marker and footprint circles
                         satMarker = L.marker([data.lat, data.lon], {icon: satIcon}).addTo(map);
-                        satCircle = L.circle([data.lat, data.lon], {
-                            radius: 800000, // 800 kilometers dynamic footprint circle
+                        
+                        swirCircle = L.circle([data.lat, data.lon], {
+                            radius: 5000, // 10km diameter SWIR sensor footprint
+                            color: '#ffaa33',
+                            fillColor: '#ffaa33',
+                            fillOpacity: 0.15,
+                            weight: 1.5
+                        }).addTo(map);
+                        
+                        vnirCircle = L.circle([data.lat, data.lon], {
+                            radius: 10000, // 20km diameter VNIR sensor footprint
                             color: '#00ff41',
                             fillColor: '#00ff41',
-                            fillOpacity: 0.08,
-                            weight: 1,
-                            dashArray: '4, 4'
+                            fillOpacity: 0.1,
+                            weight: 1.5
                         }).addTo(map);
-                        map.setView([data.lat, data.lon], 6);
+                        
+                        thermalCircle = L.circle([data.lat, data.lon], {
+                            radius: 20000, // 40km diameter Thermal sensor footprint
+                            color: '#e24b4a',
+                            fillColor: '#e24b4a',
+                            fillOpacity: 0.05,
+                            weight: 1.5
+                        }).addTo(map);
+                        
+                        map.setView([data.lat, data.lon], 10);
                     } else {
                         // Smoothly update positions
                         satMarker.setLatLng([data.lat, data.lon]);
-                        satCircle.setLatLng([data.lat, data.lon]);
+                        swirCircle.setLatLng([data.lat, data.lon]);
+                        vnirCircle.setLatLng([data.lat, data.lon]);
+                        thermalCircle.setLatLng([data.lat, data.lon]);
                     }
                 }
             } catch(e) {
@@ -263,7 +360,7 @@
                             missionMarkers[item.name] = popup;
                             
                             // Fly to and focus map nicely on the fire hazard area
-                            map.flyTo([data.lat, data.lon], 5, { animate: true, duration: 1.5 });
+                            map.flyTo([data.lat, data.lon], 10, { animate: true, duration: 1.5 });
                         }
                     } else {
                         // If file-bus indicates state is cleared, remove the popup
