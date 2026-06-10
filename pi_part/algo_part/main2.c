@@ -215,7 +215,7 @@ int main() {
     printf("[OS] Delta: %.2f ms\n\n", t1 - t0);
     sleep(5);
     t0 = get_time_ms();
-    copy_file("call1/OIL_LEAK_LAT41.122_LON-8.895.dat",        "output/OIL_LEAK_LAT41.122_LON-8.895.dat");
+    copy_file("call1/OIL_LEAK_LAT38.500_LON-9.500.dat",        "output/OIL_LEAK_LAT38.500_LON-9.500.dat");
     t1 = get_time_ms();
     printf("[OS] Delta: %.2f ms\n\n", t1 - t0);
     sleep(5);

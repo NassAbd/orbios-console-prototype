@@ -153,15 +153,15 @@
         </div>
         <div class="legend-item">
             <span class="legend-icon legend-circle-swir"></span>
-            <span>SWIR Sensor (10km footprint)</span>
+            <span>SWIR Sensor (300km footprint)</span>
         </div>
         <div class="legend-item">
             <span class="legend-icon legend-circle-vnir"></span>
-            <span>VNIR Sensor (20km footprint)</span>
+            <span>VNIR Sensor (600km footprint)</span>
         </div>
         <div class="legend-item">
             <span class="legend-icon legend-circle-thermal"></span>
-            <span>Thermal Sensor (40km footprint)</span>
+            <span>Thermal Sensor (1000km footprint)</span>
         </div>
         <div class="legend-item">
             <span class="legend-icon legend-line-targeting"></span>
@@ -181,7 +181,7 @@
     <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
     <script>
         const map = L.map('map', { 
-            center: [40.2, -7.8], zoom: 10, 
+            center: [40.2, -6.5], zoom: 6, 
             zoomControl: false, attributionControl: false 
         });
         L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png').addTo(map);
@@ -211,7 +211,7 @@
                         satMarker = L.marker([data.lat, data.lon], {icon: satIcon}).addTo(map);
                         
                         swirCircle = L.circle([data.lat, data.lon], {
-                            radius: 5000, // 10km diameter SWIR sensor footprint
+                            radius: 150000, // 300km diameter SWIR sensor footprint
                             color: '#ffaa33',
                             fillColor: '#ffaa33',
                             fillOpacity: 0.15,
@@ -219,7 +219,7 @@
                         }).addTo(map);
                         
                         vnirCircle = L.circle([data.lat, data.lon], {
-                            radius: 10000, // 20km diameter VNIR sensor footprint
+                            radius: 300000, // 600km diameter VNIR sensor footprint
                             color: '#00ff41',
                             fillColor: '#00ff41',
                             fillOpacity: 0.1,
@@ -227,14 +227,12 @@
                         }).addTo(map);
                         
                         thermalCircle = L.circle([data.lat, data.lon], {
-                            radius: 20000, // 40km diameter Thermal sensor footprint
+                            radius: 500000, // 1000km diameter Thermal sensor footprint
                             color: '#e24b4a',
                             fillColor: '#e24b4a',
                             fillOpacity: 0.05,
                             weight: 1.5
                         }).addTo(map);
-                        
-                        map.setView([data.lat, data.lon], 10);
                     } else {
                         // Smoothly update positions
                         satMarker.setLatLng([data.lat, data.lon]);
@@ -359,8 +357,7 @@
                             
                             missionMarkers[item.name] = popup;
                             
-                            // Fly to and focus map nicely on the fire hazard area
-                            map.flyTo([data.lat, data.lon], 10, { animate: true, duration: 1.5 });
+                            // Map flyTo disabled for smooth visual flow
                         }
                     } else {
                         // If file-bus indicates state is cleared, remove the popup

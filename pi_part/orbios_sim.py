@@ -82,7 +82,8 @@ STATE: dict[str, Any] = {
     "false_alert_clear_time": None,
     "completed_display_ticks": 0,
     "active_alerts": [],
-    "latched_states": {k: False for k in LATCH_MSGS}
+    "latched_states": {k: False for k in LATCH_MSGS},
+    "demo_start_time": None
 }
 
 # --- Orbital Setup ---
@@ -102,10 +103,24 @@ def log_event(msg, payload=None):
         json.dump(data, f)
 
 def update_telemetry():
+    lat = 44.5
+    lon = -2.0
+    start_time = STATE.get("demo_start_time")
+    if start_time is not None:
+        elapsed = time.time() - start_time
+        duration = 120.0
+        if elapsed < duration:
+            pct = elapsed / duration
+            lat = 44.5 + pct * (35.5 - 44.5)
+            lon = -2.0 + pct * (-10.0 - (-2.0))
+        else:
+            lat = 35.5
+            lon = -10.0
+            
     telemetry = {
         "id": "ORBIOS-S1",
-        "lat": 40.2000,
-        "lon": -7.8000,
+        "lat": lat,
+        "lon": lon,
         "alt_km": 420.0,
         "timestamp": datetime.now().isoformat()
     }
@@ -140,6 +155,7 @@ def clean_signals():
     STATE["completed_display_ticks"] = 0
     STATE["active_alerts"] = []
     STATE["latched_states"] = {k: False for k in LATCH_MSGS}
+    STATE["demo_start_time"] = None
     if STATE["algo_process"]:
         try:
             STATE["algo_process"].terminate()
@@ -397,7 +413,8 @@ def run_sim():
                     
                     if fname.startswith("START_AI"):
                         if not STATE["algo_process"]:
-                            log_event("PBS: SUBMITTING JOB PBS-1024 TO TASK SCHEDULER")
+                            STATE["demo_start_time"] = time.time()
+                            log_event("PBS: SUBMITTING JOB PBS-1024 TO SCHEDULER")
                             # Clear old output files before running C algo
                             for out_file in OUTPUT_DIR.iterdir():
                                 if out_file.name.endswith(".dat"):
@@ -429,7 +446,7 @@ def run_sim():
                                     stderr=subprocess.PIPE,
                                     text=True
                                 )
-                                log_event("PBS: JOB PBS-1024 DISPATCHED TO WORKSTATION-01 via SSH")
+                                log_event("PBS: JOB PBS-1024 DISPATCHED TO WORKSTATION-01")
                             except Exception as e:
                                 log_event(f"ERROR launching C algo process: {e}")
                                 STATE["algo_process"] = None

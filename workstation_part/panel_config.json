@@ -2,7 +2,7 @@
   "panel": {
     "title": "ORBIOS MISSION CTRL v2.2",
     "font_size": 10,
-    "width_px": 360
+    "width_px": 500
   },
   "display": {
     "dir": "signals/logs",

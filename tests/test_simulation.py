@@ -28,11 +28,11 @@ def test_parse_lat_lon_type():
     assert alert_type == "FALSE_ALERT"
 
     # Oil leak filename parsing
-    res = parse_lat_lon_type("OIL_LEAK_LAT41.122_LON-8.895.dat")
+    res = parse_lat_lon_type("OIL_LEAK_LAT38.500_LON-9.500.dat")
     assert res is not None
     lat, lon, alert_type = res
-    assert lat == 41.122
-    assert lon == -8.895
+    assert lat == 38.500
+    assert lon == -9.500
     assert alert_type == "OIL_LEAK"
 
     # Invalid filename parsing
@@ -66,16 +66,17 @@ def test_dashboard_metrics_schema_idle():
         assert 0 <= validated.cpu.overall <= 100
         assert validated.temperature.value is None or validated.temperature.value > 0
         if validated.battery.available:
+            assert validated.battery.percent is not None
             assert 0 <= validated.battery.percent <= 100
             assert isinstance(validated.battery.plugged, bool)
 
 
 def test_update_telemetry_static():
-    # Verify update_telemetry returns static Spain/Portugal coordinates
+    # Verify update_telemetry returns idle coordinates when not active
     from orbios_sim import update_telemetry
     res = update_telemetry()
-    assert res["lat"] == 40.2000
-    assert res["lon"] == -7.8000
+    assert res["lat"] == 44.5000
+    assert res["lon"] == -2.0000
     assert res["alt_km"] == 420.0
 
 
@@ -105,7 +106,7 @@ def test_alert_auto_clear_logic(tmp_path, monkeypatch):
     assert alert_record["expires_at"] == 1003.0
     
     # Process an oil leak output file
-    orbios_sim.handle_new_output_file("OIL_LEAK_LAT41.122_LON-8.895.dat")
+    orbios_sim.handle_new_output_file("OIL_LEAK_LAT38.500_LON-9.500.dat")
     oil_file = tmp_path / "OIL_LEAK_ACTIVE.json"
     assert oil_file.exists()
     assert len(orbios_sim.STATE["active_alerts"]) == 2
