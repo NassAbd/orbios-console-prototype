@@ -103,19 +103,19 @@ def log_event(msg, payload=None):
         json.dump(data, f)
 
 def update_telemetry():
-    lat = 44.5
-    lon = -2.0
+    lat = 41.41126
+    lon = -6.87311
     start_time = STATE.get("demo_start_time")
     if start_time is not None:
         elapsed = time.time() - start_time
         duration = 120.0
         if elapsed < duration:
             pct = elapsed / duration
-            lat = 44.5 + pct * (35.5 - 44.5)
-            lon = -2.0 + pct * (-10.0 - (-2.0))
+            lat = 41.41126 + pct * (37.47281 - 41.41126)
+            lon = -6.87311 + pct * (-8.65757 - (-6.87311))
         else:
-            lat = 35.5
-            lon = -10.0
+            lat = 37.47281
+            lon = -8.65757
 
     telemetry = {
         "id": "ORBIOS-S1",

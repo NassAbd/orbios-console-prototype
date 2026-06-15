@@ -6,24 +6,19 @@ Reads dashboard_config.yaml and serves live metrics as JSON.
 Validated against schema.py Pydantic model SystemMetricsResponse.
 """
 
-import sys
-import json
-import yaml
 import argparse
-import requests
-import psutil
-import socket
+import json
 import platform
+import socket
+import sys
 from datetime import datetime
 from pathlib import Path
-from flask import Flask, jsonify, send_from_directory
 
-from schema import (
-    SystemMetricsResponse,
-    WildfireAlertStatus,
-    MissionAlert,
-    OpenPBSJob
-)
+import psutil
+import requests
+import yaml
+from flask import Flask, jsonify, send_from_directory
+from schema import MissionAlert, OpenPBSJob, SystemMetricsResponse, WildfireAlertStatus
 
 # Remote Pi configurations (will be overridden via CLI args)
 PI_REMOTE_ENABLED = False
@@ -82,31 +77,31 @@ def collect_local_metrics(phase: str) -> dict:
     cpu_per_core = psutil.cpu_percent(interval=None, percpu=True)
     if isinstance(cpu_per_core, float):
         cpu_per_core = [cpu_per_core]
-    
+
     cpu_freq_obj = psutil.cpu_freq()
     frequency = int(cpu_freq_obj.current) if cpu_freq_obj else 1500
     freq_max = int(cpu_freq_obj.max) if cpu_freq_obj else 1500
-    
+
     try:
         load_avg = list(psutil.getloadavg())
     except AttributeError:
         load_avg = [0.0, 0.0, 0.0]
-        
+
     # 2. Memory Metrics
     vmem = psutil.virtual_memory()
     memory_pct = vmem.percent
     used_str = f"{(vmem.used / 1024**3):.1f} GB"
     total_str = f"{(vmem.total / 1024**3):.1f} GB"
-    
+
     active_str = f"{(vmem.active / 1024**3):.1f} GB" if hasattr(vmem, "active") else None
     inactive_str = f"{(vmem.inactive / 1024**3):.1f} GB" if hasattr(vmem, "inactive") else None
     wired_str = f"{(vmem.buffers / 1024**3 + vmem.cached / 1024**3):.1f} GB" if hasattr(vmem, "buffers") else None
-    
+
     swap = psutil.swap_memory()
     swap_pct = swap.percent
     swap_used_str = f"{(swap.used / 1024**2):.1f} MB"
     swap_total_str = f"{(swap.total / 1024**3):.1f} GB"
-    
+
     # 3. Battery Metrics
     battery = {
         "available": False,
@@ -125,7 +120,7 @@ def collect_local_metrics(phase: str) -> dict:
             battery["secs_left"] = batt.secsleft if batt.secsleft != psutil.POWER_TIME_UNLIMITED else None
     except Exception:
         pass
-    
+
     # 4. Disk Metrics
     usage = psutil.disk_usage('/')
     partitions = [{
@@ -134,10 +129,10 @@ def collect_local_metrics(phase: str) -> dict:
         "used_str": f"{(usage.used / 1024**3):.1f} GB",
         "total_str": f"{(usage.total / 1024**3):.1f} GB"
     }]
-    
+
     read_rate = "0.0 B/s"
     write_rate = "0.0 B/s"
-    
+
     # 5. Temperature Metrics
     temp_val = None
     try:
@@ -146,7 +141,7 @@ def collect_local_metrics(phase: str) -> dict:
             temp_val = float(temp_path.read_text().strip()) / 1000.0
     except Exception:
         pass
-        
+
     if temp_val is None:
         try:
             temps = psutil.sensors_temperatures()
@@ -159,7 +154,7 @@ def collect_local_metrics(phase: str) -> dict:
             pass
     if temp_val is None:
         temp_val = 45.0
-        
+
     # 6. Process listing
     processes = []
     for proc in psutil.process_iter(['pid', 'name', 'username', 'cpu_percent', 'memory_percent']):
@@ -174,9 +169,9 @@ def collect_local_metrics(phase: str) -> dict:
             })
         except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
             pass
-            
+
     processes = sorted(processes, key=lambda p: (p["cpu"], p["mem"]), reverse=True)[:10]
-    
+
     # 7. Users
     users = []
     try:
@@ -192,12 +187,12 @@ def collect_local_metrics(phase: str) -> dict:
             })
     except Exception:
         pass
-        
+
     try:
         boot_time_str = datetime.fromtimestamp(psutil.boot_time()).strftime("%d %b %Y %H:%M")
     except Exception:
         boot_time_str = "unknown"
-        
+
     sysinfo = {
         "hostname": socket.gethostname(),
         "os": f"{platform.system()} {platform.release()}",
@@ -206,7 +201,7 @@ def collect_local_metrics(phase: str) -> dict:
         "uptime": phase,
         "cpu_count": psutil.cpu_count() or 4
     }
-    
+
     return {
         "cpu": {
             "overall": cpu_overall,
@@ -259,7 +254,7 @@ def metrics():
 
     if OUTPUT_DIR.exists():
         n_files = len([f for f in OUTPUT_DIR.iterdir() if f.name.endswith(".dat")])
-    
+
     # Phases mapping:
     # 0 files -> IDLE
     # 1-7 files -> PRE-PROCESSING
@@ -283,10 +278,10 @@ def metrics():
     # 3. Check for Active Alerts
     fire_confirmed_path = BASE.parent / "pi_part" / "signals" / "mission" / "FIRE_CONFIRMED.json"
     oil_leak_path = BASE.parent / "pi_part" / "signals" / "mission" / "OIL_LEAK_ACTIVE.json"
-    
+
     active_alert = fire_confirmed_path.exists() or oil_leak_path.exists()
     alert_status = WildfireAlertStatus(active=active_alert)
-    
+
     if fire_confirmed_path.exists():
         try:
             with open(fire_confirmed_path, "r") as f:
