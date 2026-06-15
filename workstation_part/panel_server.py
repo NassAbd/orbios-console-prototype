@@ -5,12 +5,13 @@ Run with:  python3 server.py
 Then open: http://localhost:8765
 """
 
+import argparse
 import http.server
 import json
 import pathlib
 import socketserver
 import sys
-import argparse
+
 import requests
 
 PORT = 8765

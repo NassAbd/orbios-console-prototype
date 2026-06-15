@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
-import time
-from typing import Any
 import json
 import pathlib
-import subprocess
-import re
-from datetime import datetime
-from skyfield.api import load, EarthSatellite
 import platform
+import re
 import socket
+import subprocess
 import threading
+import time
+from datetime import datetime
+from typing import Any
+
 import psutil
 from flask import Flask, jsonify, request, send_from_directory
-
+from skyfield.api import EarthSatellite, load
 
 # --- Paths ---
 PROJECT_ROOT = pathlib.Path(__file__).parent.absolute()
@@ -97,7 +97,7 @@ def log_event(msg, payload=None):
     print(f"[{ts_str}] {msg}")
     log_name = f"{ts_str}_{msg.replace(' ', '_')}"
     log_path = LOGS / log_name
-    
+
     data = {"timestamp": ts_str, "message": msg, "payload": payload or {}}
     with open(log_path, "w") as f:
         json.dump(data, f)
@@ -116,7 +116,7 @@ def update_telemetry():
         else:
             lat = 35.5
             lon = -10.0
-            
+
     telemetry = {
         "id": "ORBIOS-S1",
         "lat": lat,
@@ -124,7 +124,7 @@ def update_telemetry():
         "alt_km": 420.0,
         "timestamp": datetime.now().isoformat()
     }
-    
+
     with open(DATA / "telemetry" / "sat_01.json", "w") as f:
         json.dump(telemetry, f)
     return telemetry
@@ -200,7 +200,7 @@ def parse_lat_lon_type(filename):
         return None
     lat = float(lat_match.group(1))
     lon = float(lon_match.group(1))
-    
+
     if "WILDFIRE" in filename:
         return lat, lon, "WILDFIRE"
     elif "FALSE_ALERT" in filename:
@@ -213,17 +213,17 @@ def handle_new_output_file(filename):
     name_no_ext = filename
     if filename.endswith(".dat"):
         name_no_ext = filename[:-4]
-    
+
     # Write chronological log for Control Panel UI terminal
     log_event(name_no_ext.replace('_', ' '))
-    
+
     # Parse coordinates and alert type
     parsed = parse_lat_lon_type(filename)
     if not parsed:
         return
-        
+
     lat, lon, alert_type = parsed
-    
+
     if alert_type == "WILDFIRE":
         alert = {
             "type": "WILDFIRE",
@@ -245,7 +245,7 @@ def handle_new_output_file(filename):
         else:
             log_event("COMMS: LINK OFFLINE - BUFFERING WILDFIRE ALERT", alert)
             STATE["onboard_confirmed_wildfires"].append(alert)
-            
+
     elif alert_type == "FALSE_ALERT":
         alert = {
             "type": "HEAT_ANOMALY",
@@ -258,7 +258,7 @@ def handle_new_output_file(filename):
         with open(MISSION / "HEAT_SPIKE_ACTIVE.json", "w") as jf:
             json.dump(alert, jf)
         STATE["false_alert_clear_time"] = time.time() + 3.0
-        
+
     elif alert_type == "OIL_LEAK":
         alert = {
             "type": "OIL_LEAK",
@@ -284,15 +284,15 @@ def handle_new_output_file(filename):
 def run_sim():
     log_event("ORBIOS SIMULATOR ONLINE")
     compile_algo()
-    
+
     # Clean start
     clean_signals()
-    
+
     while True:
         try:
             # 1. Update Physics
             update_telemetry()
-            
+
             # 2. Check current Downlink Status
             aos_active = is_aos_active()
 
@@ -335,7 +335,7 @@ def run_sim():
             # 5. Monitor C program output folder
             if OUTPUT_DIR.exists():
                 found_files = [f.name for f in OUTPUT_DIR.iterdir() if f.name.endswith(".dat")]
-                # Sort alphabetically to avoid directory listing order discrepancies, 
+                # Sort alphabetically to avoid directory listing order discrepancies,
                 # but process them dynamically as they appear.
                 for fname in sorted(found_files):
                     if fname not in STATE["processed_output_files"]:
@@ -351,7 +351,7 @@ def run_sim():
                 progress = int((n_files / 24) * 100)
                 if progress > 100:
                     progress = 100
-                
+
                 if is_running:
                     job = {
                         "job_id": "PBS-1024",
@@ -410,7 +410,7 @@ def run_sim():
             if MISSION.exists():
                 for f in list(MISSION.iterdir()):
                     fname = f.name
-                    
+
                     if fname.startswith("START_AI"):
                         if not STATE["algo_process"]:
                             STATE["demo_start_time"] = time.time()
@@ -424,7 +424,7 @@ def run_sim():
                                         pass
                             STATE["processed_output_files"] = set()
                             STATE["completed_display_ticks"] = 0
-                            
+
                             # Queue initial state
                             job = {
                                 "job_id": "PBS-1024",
@@ -436,7 +436,7 @@ def run_sim():
                             }
                             with open(MISSION / "pbs_queue.json", "w") as jf:
                                 json.dump([job], jf)
-                                
+
                             # Spawn the C program
                             try:
                                 STATE["algo_process"] = subprocess.Popen(
@@ -454,7 +454,7 @@ def run_sim():
                             f.unlink()
                         except Exception:
                             pass
-                        
+
                     elif fname.startswith("RESET"):
                         log_event("SYSTEM RESET COMMAND RECEIVED")
                         clean_signals()
@@ -463,21 +463,21 @@ def run_sim():
                             f.unlink()
                         except Exception:
                             pass
-                        
+
                     elif fname.startswith("INIT_FIRE"):
                         log_event("DETECTION: RAW SIGNAL ACQUIRED FROM PORTUGAL SECTOR")
                         try:
                             f.unlink()
                         except Exception:
                             pass
-                        
+
                     elif fname.startswith("INIT_FALSE"):
                         log_event("DETECTION: FALSE ALARM TELEMETRY DOWNLINKED")
                         try:
                             f.unlink()
                         except Exception:
                             pass
-                            
+
                     elif fname.startswith("STAR_TRACKER_CALC"):
                         dat_file = BUTTON_DAT_FILES.get("STAR_TRACKER_CALC")
                         if dat_file:
@@ -486,7 +486,7 @@ def run_sim():
                             f.unlink()
                         except Exception:
                             pass
-                            
+
                     elif fname.startswith("THRUSTER_PURGE"):
                         dat_file = BUTTON_DAT_FILES.get("THRUSTER_PURGE")
                         if dat_file:
@@ -507,35 +507,35 @@ def collect_pi_metrics() -> dict:
     cpu_per_core = psutil.cpu_percent(interval=None, percpu=True)
     if isinstance(cpu_per_core, float):
         cpu_per_core = [cpu_per_core]
-    
+
     # cpu freq
     cpu_freq_obj = psutil.cpu_freq()
     frequency = int(cpu_freq_obj.current) if cpu_freq_obj else 1500
     freq_max = int(cpu_freq_obj.max) if cpu_freq_obj else 1500
-    
+
     # load average
     try:
         load_avg = list(psutil.getloadavg())
     except AttributeError:
         load_avg = [0.0, 0.0, 0.0]
-        
+
     # 2. Memory Metrics
     vmem = psutil.virtual_memory()
     memory_pct = vmem.percent
     used_str = f"{(vmem.used / 1024**3):.1f} GB"
     total_str = f"{(vmem.total / 1024**3):.1f} GB"
-    
+
     # Linux-specific active/inactive/buffers/cached
     active_str = f"{(vmem.active / 1024**3):.1f} GB" if hasattr(vmem, "active") else None
     inactive_str = f"{(vmem.inactive / 1024**3):.1f} GB" if hasattr(vmem, "inactive") else None
     wired_str = f"{(vmem.buffers / 1024**3 + vmem.cached / 1024**3):.1f} GB" if hasattr(vmem, "buffers") else None
-    
+
     # swap
     swap = psutil.swap_memory()
     swap_pct = swap.percent
     swap_used_str = f"{(swap.used / 1024**2):.1f} MB"
     swap_total_str = f"{(swap.total / 1024**3):.1f} GB"
-    
+
     # 3. Battery Metrics - adapted for Pi (which is wall powered)
     battery = {
         "available": False,
@@ -545,7 +545,7 @@ def collect_pi_metrics() -> dict:
         "cycle_count": None,
         "health": None
     }
-    
+
     # 4. Disk Metrics
     usage = psutil.disk_usage('/')
     partitions = [{
@@ -554,10 +554,10 @@ def collect_pi_metrics() -> dict:
         "used_str": f"{(usage.used / 1024**3):.1f} GB",
         "total_str": f"{(usage.total / 1024**3):.1f} GB"
     }]
-    
+
     read_rate = "0.0 B/s"
     write_rate = "0.0 B/s"
-    
+
     # 5. Temperature Metrics
     temp_val = None
     try:
@@ -566,7 +566,7 @@ def collect_pi_metrics() -> dict:
             temp_val = float(temp_path.read_text().strip()) / 1000.0
     except Exception:
         pass
-        
+
     if temp_val is None:
         try:
             temps = psutil.sensors_temperatures()
@@ -579,7 +579,7 @@ def collect_pi_metrics() -> dict:
             pass
     if temp_val is None:
         temp_val = 45.0
-        
+
     # 6. Process listing
     processes = []
     for proc in psutil.process_iter(['pid', 'name', 'username', 'cpu_percent', 'memory_percent']):
@@ -594,9 +594,9 @@ def collect_pi_metrics() -> dict:
             })
         except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
             pass
-            
+
     processes = sorted(processes, key=lambda p: (p["cpu"], p["mem"]), reverse=True)[:10]
-    
+
     # 7. Users
     users = []
     try:
@@ -612,7 +612,7 @@ def collect_pi_metrics() -> dict:
             })
     except Exception:
         pass
-        
+
     # 8. Sysinfo (with phase mapping for uptime)
     n_files = 0
     if OUTPUT_DIR.exists():
@@ -627,12 +627,12 @@ def collect_pi_metrics() -> dict:
         phase = "POST-PROCESSING"
     else:
         phase = "COMPLETED"
-        
+
     try:
         boot_time_str = datetime.fromtimestamp(psutil.boot_time()).strftime("%d %b %Y %H:%M")
     except Exception:
         boot_time_str = "unknown"
-        
+
     sysinfo = {
         "hostname": socket.gethostname(),
         "os": f"{platform.system()} {platform.release()}",
@@ -641,7 +641,7 @@ def collect_pi_metrics() -> dict:
         "uptime": phase,
         "cpu_count": psutil.cpu_count() or 4
     }
-    
+
     return {
         "cpu": {
             "overall": cpu_overall,
@@ -683,14 +683,14 @@ pi_app = Flask("orbios_pi_server")
 @pi_app.route("/api/metrics")
 def pi_metrics():
     metrics_dict = collect_pi_metrics()
-    
+
     # Check for active mission alerts
     fire_confirmed_path = MISSION / "FIRE_CONFIRMED.json"
     oil_leak_path = MISSION / "OIL_LEAK_ACTIVE.json"
     active_alert = fire_confirmed_path.exists() or oil_leak_path.exists()
-    
+
     metrics_dict["wildfire_alert"]["active"] = active_alert
-    
+
     if fire_confirmed_path.exists():
         try:
             with open(fire_confirmed_path, "r") as f:
@@ -703,7 +703,7 @@ def pi_metrics():
                 metrics_dict["wildfire_alert"]["data"] = json.load(f)
         except Exception:
             pass
-            
+
     # Check PBS queue
     pbs_queue_path = MISSION / "pbs_queue.json"
     if pbs_queue_path.exists():
@@ -712,7 +712,7 @@ def pi_metrics():
                 metrics_dict["pbs_queue"] = json.load(f)
         except Exception:
             pass
-            
+
     return jsonify(metrics_dict)
 
 @pi_app.route("/api/touch", methods=["POST"])
@@ -791,7 +791,7 @@ if __name__ == "__main__":
     # Start the API server thread
     api_thread = threading.Thread(target=start_pi_api_server, daemon=True)
     api_thread.start()
-    
+
     try:
         run_sim()
     except KeyboardInterrupt:

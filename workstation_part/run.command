@@ -6,9 +6,11 @@ cd "$PROJECT_DIR"
 
 # Parse arguments
 REMOTE_IP=""
+SERVER_ONLY=false
 while [[ "$#" -gt 0 ]]; do
     case $1 in
         --remote) REMOTE_IP="$2"; shift ;;
+        --server-only) SERVER_ONLY=true ;;
         *) echo "Unknown parameter: $1"; exit 1 ;;
     esac
     shift
@@ -60,41 +62,78 @@ if [ -n "$REMOTE_IP" ]; then
     trap "echo 'Stopping ORBIOS proxy servers...'; kill $DASH_PID $PANEL_PID; exit" INT TERM
     wait
 else
-    echo "Running in LOCAL Mode..."
-    
-    echo "Cleaning simulation signals..."
-    rm -rf ../pi_part/signals/mission/* ../pi_part/signals/logs/*
-    mkdir -p ../pi_part/signals/mission ../pi_part/signals/logs
-    
-    if command -v gcc &> /dev/null; then
-        echo "Compiling C algo code..."
-        gcc -o ../pi_part/algo_part/main2 ../pi_part/algo_part/main2.c ../pi_part/algo_part/payload.c
+    if [ "$SERVER_ONLY" = true ]; then
+        echo "Running in SERVER-ONLY Mode (NFS Shared Mode)..."
+        
+        uv run python3 dashboard_server.py > .dashboard_v2.log 2>&1 &
+        DASH_PID=$!
+        
+        uv run python3 panel_server.py > .panel_v2.log 2>&1 &
+        PANEL_PID=$!
+        
+        # Wait a moment for servers to bind
+        sleep 2
+        
+        # Check if servers started successfully
+        if ! kill -0 $DASH_PID &>/dev/null || ! kill -0 $PANEL_PID &>/dev/null; then
+            echo "ERROR: Failed to start workstation servers."
+            echo "--> Regarde le contenu de .dashboard_v2.log et .panel_v2.log pour voir l'erreur Python."
+            kill $DASH_PID $PANEL_PID 2>/dev/null
+            exit 1
+        fi
+        
+        echo "------------------------------------------------"
+        echo "  ORBIOS CONSOLE RUNNING IN SERVER-ONLY MODE (NFS)"
+        echo "  "
+        echo "  Main UI:    http://localhost:5005/index.html"
+        echo "  Dashboard:  http://localhost:5005"
+        echo "  Panel:      http://localhost:8765"
+        echo "------------------------------------------------"
+        
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            echo "Opening local UI in default browser..."
+            open "http://localhost:5005/index.html"
+        fi
+        
+        trap "echo 'Stopping ORBIOS servers...'; kill $DASH_PID $PANEL_PID; exit" INT TERM
+        wait
     else
-        echo "Warning: gcc not found, C algo compilation skipped."
-    fi
-    
-    uv run python3 dashboard_server.py > .dashboard_v2.log 2>&1 &
-    DASH_PID=$!
-    
-    uv run python3 panel_server.py > .panel_v2.log 2>&1 &
-    PANEL_PID=$!
-    
-    (cd ../pi_part && uv run python3 orbios_sim.py > .sim_v2.log 2>&1 &)
-    SIM_PID=$!
+        echo "Running in LOCAL Mode..."
+        
+        echo "Cleaning simulation signals..."
+        rm -rf ../pi_part/signals/mission/* ../pi_part/signals/logs/*
+        mkdir -p ../pi_part/signals/mission ../pi_part/signals/logs
+        
+        if command -v gcc &> /dev/null; then
+            echo "Compiling C algo code..."
+            gcc -o ../pi_part/algo_part/main2 ../pi_part/algo_part/main2.c ../pi_part/algo_part/payload.c
+        else
+            echo "Warning: gcc not found, C algo compilation skipped."
+        fi
+        
+        uv run python3 dashboard_server.py > .dashboard_v2.log 2>&1 &
+        DASH_PID=$!
+        
+        uv run python3 panel_server.py > .panel_v2.log 2>&1 &
+        PANEL_PID=$!
+        
+        (cd ../pi_part && uv run python3 orbios_sim.py > .sim_v2.log 2>&1 &)
+        SIM_PID=$!
 
-    echo "------------------------------------------------"
-    echo "  ORBIOS CONSOLE RUNNING IN LOCAL MODE"
-    echo "  "
-    echo "  Main UI:    http://localhost:5005/index.html"
-    echo "  Dashboard:  http://localhost:5005"
-    echo "  Panel:      http://localhost:8765"
-    echo "------------------------------------------------"
-    
-    if [[ "$OSTYPE" == "darwin"* ]]; then
-        echo "Opening local UI in default browser..."
-        open "http://localhost:5005/index.html"
+        echo "------------------------------------------------"
+        echo "  ORBIOS CONSOLE RUNNING IN LOCAL MODE"
+        echo "  "
+        echo "  Main UI:    http://localhost:5005/index.html"
+        echo "  Dashboard:  http://localhost:5005"
+        echo "  Panel:      http://localhost:8765"
+        echo "------------------------------------------------"
+        
+        if [[ "$OSTYPE" == "darwin"* ]]; then
+            echo "Opening local UI in default browser..."
+            open "http://localhost:5005/index.html"
+        fi
+        
+        trap "echo 'Stopping ORBIOS local servers...'; kill $DASH_PID $PANEL_PID $SIM_PID; exit" INT TERM
+        wait
     fi
-    
-    trap "echo 'Stopping ORBIOS local servers...'; kill $DASH_PID $PANEL_PID $SIM_PID; exit" INT TERM
-    wait
 fi
